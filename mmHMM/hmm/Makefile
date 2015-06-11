@@ -63,7 +63,7 @@ all: $(PROGS)
 $(PROGS): $(addprefix $(SMITHLAB_CPP)/, \
 	smithlab_os.o smithlab_utils.o GenomicRegion.o OptionParser.o) \
 
-hmr-cthmm: $(addprefix $(COMMON_DIR)/, \
+hmr-cthmm: $(addprefix $(COMMON_DIR)/, MethpipeFiles.o \
 	TwoStateCTHMM.o Distro.o BetaBin.o false_discovery_rate.o numerical-utils.o) \
 	$(addprefix $(SMITHLAB_CPP)/, Smoothing.o)
 

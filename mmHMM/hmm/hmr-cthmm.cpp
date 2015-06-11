@@ -27,6 +27,7 @@
 #include "GenomicRegion.hpp"
 #include "OptionParser.hpp"
 #include "TwoStateCTHMM.hpp"
+#include "MethpipeFiles.hpp"
 #include "Distro.hpp"
 #include "false_discovery_rate.hpp"
 
