@@ -199,13 +199,6 @@ rm_junk(const float &min_del_freq, const size_t &min_size,
   smallunits.erase(smallunits.begin() + j, smallunits.end());
 }
 
-struct idxed_val {
-  idxed_val( ) : idx(0), val(0) {}
-  idxed_val(const size_t i, const float v) : idx(i), val(v) {}
-  bool operator>(const idxed_val &other) const { return (val > other.val); }
-  size_t idx;
-  float val;
-};
 
 static void
 score_a_subunit(Subunit &subunit, const vector<vector<GenomicRegion> > &cpgs) {
@@ -219,128 +212,6 @@ score_a_subunit(Subunit &subunit, const vector<vector<GenomicRegion> > &cpgs) {
       np = (subunit.cpgbound[i].second - subunit.cpgbound[i].first + 1) - p;
       subunit.score[i] = subunit.source[i] ? p : np;
     }
-  }
-}
-
-static void
-score_subunits_and_sort(const vector<vector<GenomicRegion> > &cpgs,
-                        vector<Subunit> &subunits, vector<idxed_val> &scores) {
-  scores.resize(subunits.size());
-  for (size_t i = 0; i < subunits.size(); ++i) {
-    score_a_subunit(subunits[i], cpgs);
-    scores[i].idx = i;
-    scores[i].val = subunits[i].score_sum();
-  }
-  sort(scores.begin(), scores.end(), std::greater<idxed_val>());
-}
-////////////////////////////////////////////////////////////////////////////////
-// FUNCTIONS FOR MERGING UNITS
-static vector<Subunit>::iterator
-get_last_in_island(const vector<Subunit> &smallunits,
-                   vector<Subunit>::iterator f) {
-  bool in_island = true;
-  string chr = (*f).chr;
-  size_t iend = (*f).iend;
-  f++;
-  while (in_island && f != smallunits.end()) {
-    if ((*f).start > iend || (*f).chr != chr)
-      in_island = false;
-    else
-      f++;
-  }
-  return --f;
-}
-
-
-static Subunit
-generate_merged_subunit(Subunit &x, Subunit &y, char core, float &mscore,
-                        const vector<vector<GenomicRegion> > &cpgs) {
-  Subunit z = Subunit(x);
-  z.end = y.end;
-  z.count = 0;
-  if (core == 'r') z.source = y.source;
-  for (size_t i = 0; i < x.source.size(); ++i) {
-    if (x.cpgbound[i].first != 0 && y.cpgbound[i].first != 0) {
-      z.cpgbound[i].second = y.cpgbound[i].second;
-    }
-    else if (x.cpgbound[i].first == 0 && y.cpgbound[i].first != 0) {
-      z.cpgbound[i] = y.cpgbound[i];
-    }
-    if (z.source[i]) z.count++; // set as HMR
-  }
-  score_a_subunit(z, cpgs);
-  float sep_score = x.score_sum_len() + y.score_sum_len();
-  if (sep_score == 0) 
-    mscore = 0;
-  else 
-    mscore = static_cast<float>(z.score_sum_len()) /
-             static_cast<float>(sep_score);
-  return z;
-}
-
-static bool
-merge_two(const float &degcutoff, const vector<idxed_val> &scores,
-          vector<Subunit> &island, const vector<vector<GenomicRegion> > &cpgs) {
-  
-  bool has_merged = false;
-  float mscore = 0;
-  float mscore_left = 0;
-  float mscore_right = 0;
-  Subunit lhs, rhs;
-
-  size_t i = 0;
-  for (size_t k = 0; k < scores.size() && mscore < degcutoff; ++k) {
-    i = scores[k].idx;
-    if ( i == 0)
-      rhs = generate_merged_subunit(island[i], island[i+1], 'l', mscore_right, cpgs);
-    else if (i == island.size() - 1 )
-      lhs = generate_merged_subunit(island[i-1], island[i], 'r', mscore_left, cpgs);
-    else {
-      lhs = generate_merged_subunit(island[i-1], island[i], 'r', mscore_left, cpgs);
-      rhs = generate_merged_subunit(island[i], island[i+1], 'l', mscore_right, cpgs);
-    }
-    mscore = mscore_left > mscore_right ? mscore_left : mscore_right;
-  }
-  
-  if (mscore >= degcutoff) {
-    has_merged = true;
-    if (mscore_left > mscore_right) {
-      island[i-1] = lhs;
-      island.erase(island.begin() + i);
-      if (island[i-1].empty() || island[i-1].zero_density()) island.erase(island.begin() + i-1);
-    } else {
-      island[i] = rhs;
-      island.erase(island.begin() + i+1);
-      if (island[i].empty() || island[i].zero_density()) island.erase(island.begin() + i);
-    }
-  }
-  return has_merged;
-}
-
-static void
-merge_smallunits(const float &degcutoff,
-                 const vector<vector<GenomicRegion> > &cpgs,
-                 vector<Subunit> &smallunits, vector<Subunit> &subunits) {
-  // merge smallunits by clustering
-  vector<Subunit>::iterator si = smallunits.begin();
-  string chr = "";
-  while(si != smallunits.end()) {
-    if ((*si).chr != chr) {
-      chr = (*si).chr;
-      std::cout << chr << endl;
-    }
-    
-    vector<Subunit>::iterator ei = get_last_in_island(smallunits, si);
-    vector<Subunit> island = vector<Subunit>(si, ei+1);
-    
-    vector<idxed_val> ranked_scores(island.size(), idxed_val(0, 0));
-    score_subunits_and_sort(cpgs, island, ranked_scores);
-    while (island.size() > 1
-           && merge_two(degcutoff, ranked_scores, island, cpgs)) {
-      score_subunits_and_sort(cpgs, island, ranked_scores);
-    }
-    subunits.insert(subunits.end(), island.begin(), island.end());
-    si = ++ei;
   }
 }
 
@@ -360,17 +231,15 @@ join_source(const vector<bool> &s, string sep) {
 
 static void
 subunits_to_file(const string &outfile, const vector<Subunit> &subunits) {
-  size_t num = subunits[0].source.size();
   std::ofstream of;
   if (!outfile.empty()) of.open(outfile.c_str());
   std::ostream out(outfile.empty() ? std::cout.rdbuf() : of.rdbuf());
   for (size_t i = 0; i < subunits.size(); ++i) {
-    float freq = static_cast<float> (subunits[i].count) / static_cast<float> (num);
      out << subunits[i].chr << '\t'
-          << subunits[i].start << '\t' << subunits[i].end << '\t'
-          << join_source(subunits[i].source, ",") << '\t'
-          << freq << '\t'// << subunits[i].score_sum() << '\t'
-          << subunits[i].strand << endl;
+         << subunits[i].start << '\t' << subunits[i].end << '\t'
+         << subunits[i].istart << '\t' << subunits[i].iend << '\t'
+         << join_source(subunits[i].source, ",") << '\t'
+         << subunits[i].num_cpg() << '\t' << subunits[i].score_sum() << endl;
     }
 }
 
@@ -469,15 +338,11 @@ main(int argc, const char **argv) {
       load_cpgs(i, fidmap[i], ppdir, smallunits, cpgs);
     }
     std::cout << "Load cpgs: over." << endl;
-
-    std::cout << "Merge smallunits: start" << endl;
-    vector<Subunit> subunits;
-    merge_smallunits(degcutoff, cpgs, smallunits, subunits);
-    std::cout << "Merge smallunits: over" << endl;
-    std::cout << "Got " << subunits.size() << " subunits left." << endl;
     
-    sort(subunits.begin(), subunits.end(), std::greater<Subunit>());
-  
+    for (size_t i = 0; i < smallunits.size(); ++i) {
+      score_a_subunit(smallunits[i], cpgs);
+    }
+    
     subunits_to_file(outfile, smallunits);
     write_list(listfile, fidmap);
   }

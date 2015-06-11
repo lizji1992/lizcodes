@@ -36,6 +36,8 @@ using std::pair;
 struct Endpoint {
   Endpoint(const string c, const size_t s, const bool isf) :
   chr(c), start(s), count(1), is_first(isf) {}
+  Endpoint(const GenomicRegion &r, const bool isfirst,
+           const vector<bool> &source);
   bool operator<(const Endpoint &other) const {
     return (chr < other.chr ||
             (chr == other.chr &&
@@ -78,7 +80,9 @@ public:
   }
   bool empty() const;
   bool zero_density() const;
+  size_t num_cpg() const;
   float score_sum() const;
+  float score_sum_len() const;
   
   string chr;
   size_t start;

@@ -26,6 +26,21 @@
 using std::vector;
 
 
+Endpoint::Endpoint(const GenomicRegion &r, const bool isfirst,
+                       const vector<bool> &input_source) {
+  chr = r.get_chrom();
+  if (isfirst)
+    start = r.get_start();
+  else
+    start = r.get_end();
+    count = 1;
+  is_first = isfirst;
+  source = input_source;
+}
+
+
+///////////////////////////////////////////////////////////////////////////
+
 bool
 Subunit::contains(const GenomicRegion& other) const {
   return chr == other.get_chrom() && start <= other.get_start()
@@ -34,12 +49,14 @@ Subunit::contains(const GenomicRegion& other) const {
 
 bool
 Subunit::front(const GenomicRegion& other) const {
-  return chr == other.get_chrom() && end < other.get_start();
+  return (chr < other.get_chrom()) ||
+          (chr == other.get_chrom() && end < other.get_start());
 }
 
 bool
 Subunit::behind(const GenomicRegion& other) const {
-  return chr == other.get_chrom() && other.get_end() < start;
+  return (chr > other.get_chrom()) ||
+          (chr == other.get_chrom() && other.get_end() < start);
 }
 
 bool
@@ -60,9 +77,33 @@ Subunit::zero_density() const {
   return zero_density;
 }
 
+size_t
+Subunit::num_cpg() const {
+  float num = 0;
+  for (size_t i = 0; i < cpgbound.size(); ++i) {
+    if (cpgbound[i].first != 0) {
+      num += (cpgbound[i].second - cpgbound[i].first + 1);
+    }
+  }
+  return num;
+}
+
 float
 Subunit::score_sum() const {
-  return std::accumulate(score.begin(), score.end(), 0);
+  float sum = 0;
+  for (size_t i = 0; i < score.size(); ++i) {
+    sum += score[i];
+  }
+  return sum;
+}
+
+float
+Subunit::score_sum_len() const {
+  float sum = 0;
+  for (size_t i = 0; i < score.size(); ++i) {
+    sum += score[i];
+  }
+  return sum * static_cast<float> (end - start) / 1000;
 }
 
 ///////////////////////////////////////////////////////////////////////////

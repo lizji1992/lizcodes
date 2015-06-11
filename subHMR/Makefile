@@ -21,7 +21,7 @@
 SMITHLAB_CPP = ../smithlab_cpp
 SUBHMR_LIBDIR = ./lib
 
-PROGS = SubunitFinder
+PROGS = SubunitFinder UnitSignal CollapseIntervals BinarizeCpG AssignCpGs
 SOURCES = $(wildcard *.cpp)
 
 INCLUDEDIRS = $(SMITHLAB_CPP) $(SUBHMR_LIBDIR)
@@ -62,7 +62,10 @@ all: $(PROGS)
 $(PROGS): $(addprefix $(SMITHLAB_CPP)/, GenomicRegion.o smithlab_os.o \
 	smithlab_utils.o OptionParser.o)
 
-SubunitFinder: $(addprefix $(SUBHMR_LIBDIR)/, ProcSubunit.o)
+$(PROGS): $(addprefix $(SUBHMR_LIBDIR)/, ProcSubunit.o)
+
+
+UnitSignal: $(addprefix $(SUBHMR_LIBDIR)/, UnitCluster.o)
 
 %.o: %.cpp %.hpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $< $(INCLUDEARGS)
