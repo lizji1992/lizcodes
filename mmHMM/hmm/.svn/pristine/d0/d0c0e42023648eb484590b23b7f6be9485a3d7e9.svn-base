@@ -1,0 +1,351 @@
+/* Copyright (C) 2012 University of Southern California
+ *                    Andrew D Smith
+ * Author: Song Qiang and Andrew D. Smith
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this software; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+ * 02110-1301 USA
+ */
+
+#include <numeric>
+#include <cmath>
+#include <fstream>
+
+#include "smithlab_utils.hpp"
+#include "smithlab_os.hpp"
+#include "GenomicRegion.hpp"
+#include "OptionParser.hpp"
+#include "ThreeStateVDHMM.hpp"
+#include "Distro.hpp"
+
+using std::string;
+using std::vector;
+using std::cout;
+using std::endl;
+using std::cerr;
+using std::numeric_limits;
+using std::max;
+using std::min;
+using std::pair;
+using std::make_pair;
+
+using std::ostream_iterator;
+using std::ofstream;
+
+static void
+build_domains(const bool VERBOSE, 
+              const vector<SimpleGenomicRegion> &cpgs,
+              const vector<Triplet> &post_scores,
+              const vector<size_t> &reset_points,
+              const vector<STATE_LABELS> &classes,
+              vector<GenomicRegion> &domains) 
+{
+    std::vector<std::string> STATE_LABEL_STRS;
+    STATE_LABEL_STRS.resize(3);
+    STATE_LABEL_STRS[GAIN] = "GAIN";
+    STATE_LABEL_STRS[SAME] = "SAME";
+    STATE_LABEL_STRS[LOSS] = "LOSS";
+
+    for (size_t idx = 0; idx < reset_points.size() - 1; ++idx)
+    {
+        const size_t start  = reset_points[idx];
+        const size_t end = reset_points[idx + 1];
+        GenomicRegion d(cpgs[start]);
+        double score = 0;
+        switch(classes[start])
+        {
+        case GAIN: score = post_scores[start].gain; break;
+        case SAME: score = post_scores[start].same; break;
+        case LOSS: score = post_scores[start].loss; break;
+        }
+        size_t n_cpgs = 1;
+        for (size_t i = start + 1; i < end; ++i)
+        {
+            if (classes[i] == classes[i - 1])
+            {
+                switch(classes[i])
+                {
+                case GAIN: score = post_scores[i].gain; break;
+                case SAME: score = post_scores[i].same; break;
+                case LOSS: score = post_scores[i].loss; break;
+                }
+                ++n_cpgs;
+            }
+            else
+            {
+                d.set_end(cpgs[i - 1].get_end());
+                d.set_score(score);
+                d.set_name(STATE_LABEL_STRS[classes[i - 1]]);
+                domains.push_back(d);
+                
+                d = GenomicRegion(cpgs[i]);
+                switch(classes[i])
+                {
+                case GAIN: score = post_scores[i].gain; break;
+                case SAME: score = post_scores[i].same; break;
+                case LOSS: score = post_scores[i].loss; break;
+                }
+                n_cpgs = 1;
+            }
+        }
+
+        d.set_end(cpgs[end - 1].get_end());
+        d.set_score(score);
+        d.set_name(STATE_LABEL_STRS[classes[end - 1]]);
+        domains.push_back(d);
+    }
+}
+
+
+template <class T> static void
+separate_regions(const bool VERBOSE, const size_t desert_size, 
+                 vector<SimpleGenomicRegion> &cpgs,
+                 vector<T> &diffscores,
+                 vector<size_t> &reset_points) 
+{
+    if (VERBOSE)
+        cerr << "[SEPARATING BY CPG DESERT]" << endl;
+  
+    size_t prev_cpg = 0;
+    for (size_t i = 0; i < cpgs.size(); ++i) 
+    {
+        const size_t dist = (i > 0 && cpgs[i].same_chrom(cpgs[i - 1])) ? 
+            cpgs[i].get_start() - prev_cpg : numeric_limits<size_t>::max();
+        if (dist > desert_size)
+            reset_points.push_back(i);
+        prev_cpg = cpgs[i].get_start();
+    }
+    reset_points.push_back(cpgs.size());
+    if (VERBOSE)
+        cerr << "CPGS RETAINED: " << cpgs.size() << endl
+             << "DESERTS REMOVED: " << reset_points.size() - 2 << endl << endl;
+}
+
+
+static void
+load_cpgs(const bool VERBOSE, 
+          string cpgs_file, vector<SimpleGenomicRegion> &cpgs,
+          vector<double> &diffscores) 
+{
+    if (VERBOSE)
+        cerr << "[READING CPGS AND METH PROPS]" << endl;
+    vector<GenomicRegion> cpgs_in;
+    ReadBEDFile(cpgs_file, cpgs_in);
+    if (!check_sorted(cpgs_in))
+        throw SMITHLABException("CpGs not sorted in file \"" + cpgs_file + "\"");
+  
+    for (size_t i = 0; i < cpgs_in.size(); ++i) 
+    {
+        cpgs.push_back(SimpleGenomicRegion(cpgs_in[i]));
+        diffscores.push_back(cpgs_in[i].get_score());
+    }
+    if (VERBOSE)
+        cerr << "TOTAL CPGS: " << cpgs.size() << endl;
+}
+
+static void
+read_params_file(const string &params_file, 
+                 Distro &gain_emission,
+                 Distro &same_emission,
+                 Distro &loss_emission,
+                 Distro &gain_duration,
+                 Distro &same_duration,
+                 Distro &loss_duration) 
+{
+    std::ifstream in(params_file.c_str());
+    string line;
+
+    std::getline(in, line);
+    gain_emission = Distro(line);
+
+    std::getline(in, line);
+    same_emission = Distro(line);
+
+    std::getline(in, line);
+    loss_emission = Distro(line);
+
+    std::getline(in, line);
+    gain_duration = Distro(line);
+
+    std::getline(in, line);
+    same_duration = Distro(line);
+
+    std::getline(in, line);
+    loss_duration = Distro(line);
+}
+
+int
+main(int argc, const char **argv) 
+{
+    try 
+    {
+        string outfile;
+        string scores_file;
+        string trans_file;
+        string dataset_name;
+    
+        size_t desert_size = 1000;
+        size_t max_iterations = 10;
+    
+        // run mode flags
+        bool VERBOSE = false;
+    
+        // corrections for small values (not parameters):
+        double tolerance = 1e-10;
+        double min_prob  = 1e-10;
+        size_t MAX_LEN = 200;
+
+        string params_in_file;
+        string params_out_file;
+    
+        /****************** COMMAND LINE OPTIONS ********************/
+        OptionParser opt_parse(argv[0], "A program for segmenting DNA "
+                               "methylation data"
+                               "<cpg-BED-file>");
+        opt_parse.add_opt("out", 'o', "output file (BED format)", 
+                          false, outfile);
+        opt_parse.add_opt("scores", 's', "scores file (WIG format)", 
+                          false, scores_file);
+        opt_parse.add_opt("trans", 't', "trans file (WIG format)", 
+                          false, trans_file);
+        opt_parse.add_opt("desert", 'd', "desert size", false, desert_size);
+        opt_parse.add_opt("itr", 'i', "max iterations", false, max_iterations); 
+        opt_parse.add_opt("max-len", 'L', "max foreground length", false, MAX_LEN); 
+        opt_parse.add_opt("verbose", 'v', "print more run info", false, VERBOSE);
+        opt_parse.add_opt("name", 'N', "data set name", false, dataset_name);
+    
+        opt_parse.add_opt("params-in", 'P', "HMM parameters file", false, params_in_file);
+        opt_parse.add_opt("params-out", 'p', "HMM parameters file", false, params_out_file);
+    
+        vector<string> leftover_args;
+        opt_parse.parse(argc, argv, leftover_args);
+        if (argc == 1 || opt_parse.help_requested()) 
+        {
+            cerr << opt_parse.help_message() << endl;
+            return EXIT_SUCCESS;
+        }
+        if (opt_parse.about_requested()) 
+        {
+            cerr << opt_parse.about_message() << endl;
+            return EXIT_SUCCESS;
+        }
+        if (opt_parse.option_missing()) 
+        {
+            cerr << opt_parse.option_missing_message() << endl;
+            return EXIT_SUCCESS;
+        }
+        if (leftover_args.empty()) 
+        {
+            cerr << opt_parse.help_message() << endl;
+            return EXIT_SUCCESS;
+        }
+        const string cpgs_file = leftover_args.front();
+        /****************** END COMMAND LINE OPTIONS *****************/
+    
+        // separate the regions by chrom and by desert
+        vector<SimpleGenomicRegion> cpgs;
+        // vector<double> meth;
+        vector<double> diffscores;
+        vector<size_t> reads;
+        load_cpgs(VERBOSE, cpgs_file, cpgs, diffscores);
+    
+        // separate the regions by chrom and by desert, and eliminate
+        // those isolated CpGs
+        vector<size_t> reset_points;
+        separate_regions(VERBOSE, desert_size, cpgs, diffscores, reset_points);
+    
+    
+        Distro gain_emission, same_emission, loss_emission;
+        Distro gain_duration, same_duration, loss_duration;
+        vector<vector<double> > trans(3, vector<double>(3, 0));
+
+        if (!params_in_file.empty()) 
+        {
+            read_params_file(params_in_file,
+                             gain_emission, same_emission, loss_emission,
+                             gain_duration, same_duration, loss_duration);
+        }
+        else 
+        {
+            gain_emission = Distro("beta 0.5 2");
+            same_emission = Distro("beta 1.5 1.5");
+            loss_emission = Distro("beta 2 0.5");
+
+            gain_duration = Distro("nbd 10 0.5");
+            same_duration = Distro("geo 0.02");
+            loss_duration = Distro("nbd 10 0.5");
+
+            trans[GAIN][SAME] = trans[LOSS][SAME] = 1;
+            trans[SAME][SAME] = 1 - same_duration.get_params().front();
+            trans[SAME][GAIN] = trans[SAME][LOSS] = (1-trans[SAME][SAME]) * 0.5;
+        }
+    
+        ThreeStateVDHMM hmm(diffscores, reset_points, min_prob, tolerance,
+                            max_iterations, VERBOSE, MAX_LEN);
+
+        hmm.set_parameters(gain_emission, same_emission, loss_emission,
+                           gain_duration, same_duration, loss_duration, trans);
+
+        if (max_iterations > 0)
+            hmm.BaumWelchTraining();
+    
+        // if (!params_out_file.empty()) 
+        // {
+        //     // WRITE ALL THE HMM PARAMETERS:
+        //     write_params_file(params_out_file, fg_alpha, fg_beta, bg_alpha, bg_beta,
+        //                       start_trans, trans, end_trans);
+        // }
+    
+        /***********************************
+         * STEP 5: DECODE THE DOMAINS
+         */
+        vector<STATE_LABELS> classes;
+        vector<Triplet> scores;
+        hmm.get_posterior_scores(scores, classes);
+    
+        // vector<double> domain_scores;
+        // get_domain_scores(classes, meth, reset_points, domain_scores);
+    
+        /***********************************
+         * STEP 6: WRITE THE RESULTS
+         */
+        // if (!scores_file.empty())
+        //     write_scores_bedgraph(scores_file, cpgs, scores);
+    
+        vector<GenomicRegion> domains;
+        build_domains(VERBOSE, cpgs, scores,
+                      reset_points, classes, domains);
+      
+        std::ostream *out = (outfile.empty()) ? &cout : 
+            new std::ofstream(outfile.c_str());
+
+        for (size_t i = 0; i < domains.size(); ++i) 
+            *out << domains[i] << '\n';
+
+        if (out != &cout) delete out;
+    }
+    catch (SMITHLABException &e) 
+    {
+        cerr << "ERROR:\t" << e.what() << endl;
+        return EXIT_FAILURE;
+    }
+    catch (std::bad_alloc &ba) 
+    {
+        cerr << "ERROR: could not allocate memory" << endl;
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
+}
+
+
