@@ -27,7 +27,6 @@
 #include "GenomicRegion.hpp"
 #include "OptionParser.hpp"
 #include "TwoStateCTHMM.hpp"
-#include "MethpipeFiles.hpp"
 #include "Distro.hpp"
 #include "false_discovery_rate.hpp"
 
@@ -54,26 +53,44 @@ load_cpgs(const bool VERBOSE,
 {
     if (VERBOSE)
         cerr << "[READING CPGS AND METH PROPS]" << endl;
-    vector<GenomicRegion> cpgs_in;
-    ReadBEDFile(cpgs_file, cpgs_in);
-    if (!check_sorted(cpgs_in))
-        throw SMITHLABException("CpGs not sorted in file \"" + cpgs_file + "\"");
+
+  string chrom, prev_chrom;                                                    
+  size_t pos, prev_pos = 0;                                                    
+  string strand, seq;                                                          
+  double level;
+  size_t coverage;                                                             
   
-    for (size_t i = 0; i < cpgs_in.size(); ++i) 
-    {
-        cpgs.push_back(SimpleGenomicRegion(cpgs_in[i]));
-        meth.push_back(make_pair(cpgs_in[i].get_score(), 0.0));
-        const string r(cpgs_in[i].get_name());
-        reads.push_back(atoi(r.substr(r.find_first_of(":") + 1).c_str()));
-        meth.back().first = int(meth.back().first * reads.back());
-        meth.back().second = int(reads.back() - meth.back().first);
-        mytime.push_back(cpgs_in[i].get_start());
+  std::ifstream in(cpgs_file.c_str());
+  while (in >> chrom >> pos >> strand >> seq >> level >> coverage) {            
+    // sanity check
+    if (chrom.empty() || strand.empty() || seq.empty()                         
+        || level < 0.0 || level > 1.0) {                                         
+      std::ostringstream oss; 
+      oss << chrom << "\t" << pos << "\t" << strand << "\t"
+          << seq << "\t" << level << "\t" << coverage << "\n";
+      throw SMITHLABException("Invalid input line:" + oss.str());              
+    }
+
+    // order check 
+    if (prev_chrom > chrom || (prev_chrom == chrom && prev_pos > pos)) { 
+        throw SMITHLABException("CpGs not sorted in file \"" + cpgs_file + "\"");
+    }
+    prev_chrom = chrom;                                                        
+    prev_pos = pos; 
+
+    // append site
+    cpgs.push_back(GenomicRegion(chrom, pos, pos+1, seq, 0, strand[0]));       
+    reads.push_back(coverage);
+    meth.push_back(std::make_pair(0.0, 0.0));
+    meth.back().first = static_cast<size_t>(round(level * coverage));
+    meth.back().second = static_cast<size_t>(coverage  - meth.back().first); 
+    mytime.push_back(cpgs.back().get_start());
     }
     if (VERBOSE)
-        cerr << "TOTAL CPGS: " << cpgs.size() << endl
-             << "MEAN COVERAGE: " 
-             << accumulate(reads.begin(), reads.end(), 0.0)/reads.size() << endl
-             << endl;
+      cerr << "TOTAL CPGS: " << cpgs.size() << endl
+           << "MEAN COVERAGE: " 
+           << accumulate(reads.begin(), reads.end(), 0.0)/reads.size() << endl
+           << endl;
 }
 
 template <class T, class U, class C> static void
