@@ -214,20 +214,21 @@ TwoStateCTHMM::backward_algorithm(const size_t start, const size_t end)
 
     std::fill(backward.begin() + start, backward.begin() + end,
               std::make_pair(0.0, 0.0)); 
-
+    
     backward[end - 1].first = lp_ft;
     backward[end - 1].second = lp_bt;
-
-    for (size_t i = end - 2; i >= start; --i)
+    if (end >= 2)
     {
+      for (size_t i = end - 2; i >= start; --i)
+      {
         const double ff =
-            (bg_rate +
-             fg_rate * exp(-(fg_rate + bg_rate) * (time[i + 1] - time[i])))
-            / (fg_rate + bg_rate);
+          (bg_rate +
+           fg_rate * exp(-(fg_rate + bg_rate) * (time[i + 1] - time[i])))
+          / (fg_rate + bg_rate);
         const double bb =
-            (fg_rate
-             + bg_rate * exp(-(fg_rate + bg_rate) * (time[i + 1] - time[i])))
-            / (fg_rate + bg_rate);
+          (fg_rate
+           + bg_rate * exp(-(fg_rate + bg_rate) * (time[i + 1] - time[i])))
+          / (fg_rate + bg_rate);
 
         const double lp_ff = log(ff);
         const double lp_fb = log(1 - ff);
@@ -236,20 +237,20 @@ TwoStateCTHMM::backward_algorithm(const size_t start, const size_t end)
 
         // observesvation i is foreground segment end
         backward[i].first =
-            log_sum_log(lp_ff + fg_segment_log_likelihood(i + 1, i + 2)
-                        + backward[i + 1].first,
-                        lp_fb + bg_segment_log_likelihood(i + 1, i + 2)
-                        + backward[i + 1].second);
+          log_sum_log(lp_ff + fg_segment_log_likelihood(i + 1, i + 2)
+              + backward[i + 1].first,
+              lp_fb + bg_segment_log_likelihood(i + 1, i + 2)
+              + backward[i + 1].second);
 
         backward[i].second =
-            log_sum_log(lp_bf + fg_segment_log_likelihood(i + 1, i + 2)
-                        + backward[i + 1].first,
-                        lp_bb + bg_segment_log_likelihood(i + 1, i + 2)
-                        + backward[i + 1].second);
- 
-        if (i == 0) break;
-   }
+          log_sum_log(lp_bf + fg_segment_log_likelihood(i + 1, i + 2)
+              + backward[i + 1].first,
+              lp_bb + bg_segment_log_likelihood(i + 1, i + 2)
+              + backward[i + 1].second);
 
+        if (i == 0) break;
+      }
+    }
     const double llh =
         log_sum_log(lp_sf + fg_segment_log_likelihood(start, start + 1)
                     + backward[start].first,
@@ -442,9 +443,7 @@ TwoStateCTHMM::BaumWelchTraining()
 double
 TwoStateCTHMM::PosteriorDecoding()
 {
-// /////
-//     cerr << "check enter PosteriorDecoding: "<< "OK" << endl;
-// /////
+    //cerr << "check enter PosteriorDecoding: "<< "OK" << endl;
 
     double total_score = 0;
 
@@ -454,7 +453,7 @@ TwoStateCTHMM::PosteriorDecoding()
             forward_algorithm(reset_points[i], reset_points[i + 1]);
         const double backward_score =
             backward_algorithm(reset_points[i], reset_points[i + 1]);
-        
+       
         assert(fabs((forward_score - backward_score)
                     / max(forward_score, backward_score))
                     < 1e-10);
@@ -462,9 +461,7 @@ TwoStateCTHMM::PosteriorDecoding()
         total_score += forward_score;
     }
 
-// /////
-//     cerr << "check exit PosteriorDecoding: "<< "OK" << endl;
-// /////
+    //cerr << "check exit PosteriorDecoding: "<< "OK" << endl;
 
     return total_score;
 }
