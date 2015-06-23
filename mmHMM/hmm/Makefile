@@ -29,7 +29,7 @@ INCLUDEDIRS =  $(SMITHLAB_CPP) $(COMMON_DIR)
 INCLUDEARGS = $(addprefix -I,$(INCLUDEDIRS))
 LIBS = -lgsl -lgslcblas
 
-PROGS = hmr-cthmm
+PROGS = hmr-cthmm hmr-vdhmm
 
 CXX = g++
 CFLAGS = -Wall -fPIC -fmessage-length=50
@@ -66,6 +66,10 @@ $(PROGS): $(addprefix $(SMITHLAB_CPP)/, \
 hmr-cthmm: $(addprefix $(COMMON_DIR)/, MethpipeFiles.o \
 	TwoStateCTHMM.o Distro.o BetaBin.o false_discovery_rate.o numerical-utils.o) \
 	$(addprefix $(SMITHLAB_CPP)/, Smoothing.o)
+
+hmr-vdhmm: $(addprefix $(COMMON_DIR)/, MethpipeFiles.o \
+  TwoStateVDHMM.o Distro.o BetaBin.o false_discovery_rate.o numerical-utils.o) \
+  $(addprefix $(SMITHLAB_CPP)/, Smoothing.o)
 
 %.o: %.cpp %.hpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $< $(INCLUDEARGS)

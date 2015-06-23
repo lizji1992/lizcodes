@@ -203,8 +203,8 @@ main(int argc, const char **argv) {
     vector<interval> intervals;
     load_intervals(interval_file, intervals);
     std::cout << "Got " << intervals.size() << " intervals." << endl;
-    sort(intervals.begin(), intervals.end());
-    std::cout << "Sort: over." << endl;
+    //sort(intervals.begin(), intervals.end());
+    //std::cout << "Sort: over." << endl;
     
     count_cpgs(intervals, cpgs);
     std::cout << "Count CpGs: over." << endl;

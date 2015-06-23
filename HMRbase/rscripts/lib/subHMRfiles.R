@@ -8,7 +8,7 @@ loadSHMR <- function(tabfile) {
   return(tab)
 }
 
-loadSHMR_chromHMM <- function(tabfile) {
+loadBED_chromHMM <- function(tabfile) {
   tab <- read.table(tabfile, header=FALSE, sep='\t',
                     colClasses=c('character',rep('numeric',2), 'character', 'numeric'),
                     col.names=c('chr', 'start', 'end', 'state', 'num_cpg'))
