@@ -27,9 +27,10 @@ endif
 COMMON_DIR = ../common
 INCLUDEDIRS =  $(SMITHLAB_CPP) $(COMMON_DIR)
 INCLUDEARGS = $(addprefix -I,$(INCLUDEDIRS))
-LIBS = -lgsl -lgslcblas
+INCLUDEARGS += -I/usr/local/include
+LIBS = -L/usr/local/lib -lgsl -lgslcblas
 
-PROGS = hmr-cthmm hmr-vdhmm
+PROGS = vdhmr vdhmr_bf NBhmr_sim
 
 CXX = g++
 CFLAGS = -Wall -fPIC -fmessage-length=50
@@ -48,8 +49,6 @@ endif
 # Flags for Mavericks
 ifeq "$(shell uname)" "Darwin"
 CXXFLAGS += -arch x86_64
-INCLUDEARGS += -I/usr/local/include
-LIBS = -L/usr/local/lib
 ifeq "$(shell if [ `sysctl -n kern.osrelease | cut -d . -f 1` -ge 13 ];\
 	               then echo 'true'; fi)" "true"
 CXXFLAGS += -stdlib=libstdc++
@@ -61,15 +60,14 @@ endif
 all: $(PROGS)
 
 $(PROGS): $(addprefix $(SMITHLAB_CPP)/, \
-	smithlab_os.o smithlab_utils.o GenomicRegion.o OptionParser.o) \
+	smithlab_os.o smithlab_utils.o GenomicRegion.o OptionParser.o)
 
-hmr-cthmm: $(addprefix $(COMMON_DIR)/, MethpipeFiles.o \
-	TwoStateCTHMM.o Distro.o BetaBin.o false_discovery_rate.o numerical-utils.o) \
-	$(addprefix $(SMITHLAB_CPP)/, Smoothing.o)
+vdhmr: $(addprefix $(COMMON_DIR)/, NBVDHMM.o distribution.o)
+vdhmr_bf: $(addprefix $(COMMON_DIR)/, NBVDHMM_BF.o distribution.o)
 
-hmr-vdhmm: $(addprefix $(COMMON_DIR)/, MethpipeFiles.o \
-  TwoStateVDHMM.o Distro.o BetaBin.o false_discovery_rate.o numerical-utils.o) \
-  $(addprefix $(SMITHLAB_CPP)/, Smoothing.o)
+NBhmr_sim: $(addprefix $(SMITHLAB_CPP)/, RNG.o Smoothing.o)
+NBhmr_sim: $(addprefix $(COMMON_DIR)/, Distro.o)
+
 
 %.o: %.cpp %.hpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $< $(INCLUDEARGS)

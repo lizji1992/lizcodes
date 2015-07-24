@@ -124,8 +124,8 @@ public:
   static bool has_params(const std::string &name);
 
 private:
-  std::string name;
   Distro_ *d;
+  std::string name;
 };
 
 std::ostream&

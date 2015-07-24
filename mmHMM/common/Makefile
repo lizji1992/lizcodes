@@ -25,6 +25,7 @@ endif
 
 INCLUDEDIRS = $(SMITHLAB_CPP)
 INCLUDEARGS = $(addprefix -I,$(INCLUDEDIRS))
+INCLUDEARGS += -I/usr/local/include
 LIBS = -L/usr/local/lib -lgsl -lgslcblas
 
 ifndef SMITHLAB_CPP
@@ -55,7 +56,7 @@ CXXFLAGS += $(OPTFLAGS)
 endif
 
 %.o: %.cpp %.hpp
-	$(CXX) $(CXXFLAGS) $(INCLUDEARGS) -c  -o $@ $< $(LIBS)
+	$(CXX) $(CXXFLAGS) $(INCLUDEARGS) -c -o $@ $< $(LIBS)
 
 clean: 
 	@-rm -f *.o *.so *.a *~

@@ -671,11 +671,7 @@ NegBinomDistro::set_params(const std::vector<double> &p) {
 double
 NegBinomDistro::sample() const {
   assert(params.size() == 2);
-  const double mu = params.front();
-  const double one_over_alpha = 1/params.back();
-  return gsl_ran_negative_binomial(Distro_::rng, 
-				   one_over_alpha/(one_over_alpha + mu), 
-				   one_over_alpha);
+  return gsl_ran_negative_binomial(Distro_::rng, p_helper, n_helper);
 }
 
 
