@@ -62,10 +62,13 @@ public:
   double
   PosteriorDecoding(const vector<pair<double, double> > &meth,
                     const vector<size_t> &reset_points,
-                    vector<int> &classes,
-                    vector<double> &llr_scores);
-
+                    vector<int> &classes, vector<double> &llr_scores);
   
+  double
+  ViterbiDecoding(const vector<pair<double, double> > &meth,
+                  const vector<size_t> &reset_points,
+                  vector<int> &classes) const;
+    
   BetaBin
   get_fg_emission() const {return fg_emission;}
 

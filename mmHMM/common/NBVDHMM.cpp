@@ -160,7 +160,8 @@ TwoVarHMM::forward_algorithm(const vector<pair<double, double> > &meth,
       for (size_t s1 = 1; s1 < num_states; ++s1) {
         forward[s2][i] = log_sum_log(forward[s2][i],
                                      forward[s1][k] + lp_trans[s1][s2] + emission[s2](meth[i]));
-//        cerr << forward[s2][i] << " ";
+       // std::cout << i << " ,"  << s1 << " - " << s2 << " : " << forward[s2][i] << endl;
+
       }
 //      forward[s2][i] += emission[s2](meth[i]);
     }
@@ -356,11 +357,11 @@ TwoVarHMM::single_iteration(const vector<pair<double, double> > &meth,
     lp_trans.resize(trans[i].size());
     for (size_t j = 0; j < trans[i].size(); ++j) {
       lp_trans[i][j] = log(trans[i][j]);
-     // std::cout << lp_trans[i][j] << " ";
+     // cerr << lp_trans[i][j] << " ";
     }
-  //  std::cout << endl;
+   // cerr << endl;
   }
- // std::cout << endl;
+  //cerr << endl;
   
   // for estimating transitions
   vector<matrix> te(num_states,
@@ -519,154 +520,12 @@ TwoVarHMM::BaumWelchTraining(const vector<pair<double, double> > &meth,
 }
 
 
-
-/*
-double
-TwoVarHMM::BaumWelchTraining(const vector<pair<double, double> > &meth,
-                               const vector<size_t> &reset_points) {
-  
-  cerr << "[ENTER BM-TRAINING]" << endl;
-  
-  vector<double> meth_lp(meth.size()), unmeth_lp(meth.size());
-  for (size_t i = 0; i < meth.size(); ++i) {
-    meth_lp[i] =
-        log(min(max(meth[i].first/(meth[i].first + meth[i].second), 1e-2),
-                1.0 - 1e-2));
-    unmeth_lp[i] =
-        log(1 - min(max(meth[i].first/(meth[i].first + meth[i].second), 1e-2),
-                     1.0 - 1e-2));
-  }
-  
-    
-  if (VERBOSE)
-    cerr << setw(5)  << "ITR"
-    << setw(18) << "F P"
-    << setw(18) << "B P"
-    << setw(18) << "F PARAMS"
-    << setw(18) << "B PARAMS"
-    << setw(10)  << "F mode"
-    << setw(14) << "DELTA"
-    << endl;
-  
-  
-  double prev_score = -std::numeric_limits<double>::max(); // total likelihood
-
-  cerr << setw(5) << "0"
-  << setw(18) << fg_p
-  << setw(18) << bg_p
-  << setw(18) << fg_emission.tostring()
-  << setw(18) << bg_emission.tostring()
-  << setw(5) << fg_mode
-  << setw(14) << "NA"
-  << setw(14) << "NA"
-  << setw(14) << "NA"
-  << endl;
-  
-  size_t i = 0;
-  double score = single_iteration(meth, reset_points, meth_lp, unmeth_lp);
-  if (VERBOSE) {
-    cerr << setw(5) << i + 1
-    << setw(18) << fg_p
-    << setw(18) << bg_p
-    << setw(18) << fg_emission.tostring()
-    << setw(18) << bg_emission.tostring()
-    << setw(5) << fg_mode
-    << setw(14) << score
-    << setw(14) << prev_score
-    << setw(14) << (score - prev_score)/std::fabs(score)
-    << endl;
-  }
-  
-  prev_score = score;
-  
-  BetaBin fg_emission_better = fg_emission;
-  BetaBin bg_emission_better = bg_emission;
-  size_t fg_mode_better = fg_mode;
-  double fg_p_better = fg_p;
-  double bg_p_better = bg_p;
-  double p_sf_better = p_sf;
-  double p_sb_better = p_sb;
-  double p_ft_better = p_ft;
-  double p_bt_better = p_bt;
-  
-  for(i = 1; i < max_iterations; ++i) {
-    // start from estimated transition/emission, alter fg_mode
-    //cerr << "NEW ITERATION " << i+1 << endl;
-    size_t start_k = 1;
-    if (fg_mode > mode_search_k) start_k = fg_mode - mode_search_k;
-    for(size_t k = start_k; k <= (fg_mode+mode_search_k); ++k) {
-      // start trainning a branch hmm
-      TwoVarHMM hmm_branch(mode_search_k, MIN_PROB, tolerance,
-                           max_iterations, VERBOSE);
-      hmm_branch.set_parameters(fg_emission, bg_emission, k, bg_mode,
-                                fg_p, bg_p, p_sf, p_sb, p_ft, p_bt);
-      
-      hmm_branch.single_iteration(meth, reset_points, meth_lp, unmeth_lp);
-      double new_score = hmm_branch.compute_likelihood(meth, reset_points,
-                                                       meth_lp, unmeth_lp);
-      
-      //cerr << "BRANCH: " << k << " NEW SCORE: " << new_score << endl;
-      
-      if (new_score > score) {
-        score = new_score;
-        fg_emission_better = hmm_branch.fg_emission;
-        bg_emission_better = hmm_branch.bg_emission;
-        fg_mode_better = hmm_branch.fg_mode;
-        fg_p_better = hmm_branch.fg_p;
-        bg_p_better = hmm_branch.bg_p;
-        p_sf_better = hmm_branch.p_sf;
-        p_sb_better = hmm_branch.p_sb;
-        p_ft_better = hmm_branch.p_ft;
-        p_bt_better = hmm_branch.p_bt;
-      }
-    }
-    
-    //cerr << "SET PARAMETERS FOR ITR " << i+1 << endl;
-    set_parameters(fg_emission_better, bg_emission_better,
-                   fg_mode_better, bg_mode, fg_p_better, bg_p_better,
-                   p_sf_better, p_sb_better, p_ft_better, p_bt_better);
-    
-    //set_parameters(fg_emission, bg_emission,
-    //               fg_mode_better, bg_mode, fg_p, bg_p,
-    //               p_sf, p_sb, p_ft, p_bt);
-    
-    
-    
-    if (VERBOSE) {
-      cerr << setw(5) << i + 1
-      << setw(18) << fg_p
-      << setw(18) << bg_p
-      << setw(18) << fg_emission.tostring()
-      << setw(18) << bg_emission.tostring()
-      << setw(5) << fg_mode
-      << setw(14) << score
-      << setw(14) << prev_score
-      << setw(14) << (score - prev_score)/std::fabs(score)
-      << endl;
-    }
-    if ((score - prev_score) < tolerance) {
-      if (VERBOSE)
-        cerr << "CONVERGED" << endl << endl;
-      break;
-    }
-    prev_score = score;
-   // cerr << "END ITERATION " << i+1 << endl;
-
-  }
-  
-  return score;
-}
-*/
-
 double
 TwoVarHMM::PosteriorDecoding(const vector<pair<double, double> > &meth,
                              const vector<size_t> &reset_points,
-                             vector<int> &classes,
-                             vector<double> &llr_scores) {
+                             vector<int> &classes, vector<double> &llr_scores) {
   
   //cerr << "[ENTER POSTERIOR DECODING]" << endl;
-  double total_score = 0;
-  
   //cerr << fg_p << " ," << bg_p << " ," << p_sf << " ," << p_sb
   //     << " ," << p_ft << " ," << p_bt << endl;
   // prepare forward/backward vectors
@@ -697,7 +556,10 @@ TwoVarHMM::PosteriorDecoding(const vector<pair<double, double> > &meth,
     }
   }
 
+  double total_score = 0;
+  
   for (size_t i = 0; i < reset_points.size() - 1; ++i) {
+    
     const double forward_score =
     forward_algorithm(meth, reset_points[i], reset_points[i + 1],
                       lp_start_trans, lp_end_trans, lp_trans);
@@ -716,25 +578,138 @@ TwoVarHMM::PosteriorDecoding(const vector<pair<double, double> > &meth,
   classes.resize(data_size);
 
   llr_scores.resize(data_size);
+  /*
+  for (size_t i = 0; i < reset_points.size() - 1; ++i) {
+
+    size_t start = reset_points[i];
+    size_t end = reset_points[i+1];
+    
+    // Start decoding
+    
+    int prev_state = fg_mode;
+    for (size_t j = start; j < end; ++j) {
+      size_t best_state = prev_state;
+      double best_state_score = forward[best_state][j] + backward[best_state][j];
+      double total_state_score = best_state_score;
+      
+      int trans_state = prev_state == fg_mode ? 0 : prev_state + 1;
+      double trans_score = forward[trans_state][j] + backward[trans_state][j];
+      total_state_score = log_sum_log(total_state_score, trans_score);
+      if (trans_score >= best_state_score) {
+        best_state = trans_state;
+        best_state_score = trans_score;
+      }
+      classes[j] = best_state;
+      llr_scores[j] = exp(best_state_score - total_state_score);
+      prev_state = best_state;
+    }
+  }
+  */
+  
+  
   for (size_t i = 0; i < data_size; ++i) {
     
-    int best_state = 0;
-    double best_state_score = forward[0][i] + backward[0][i];
-    double total_state_score = best_state_score;
-    
-    for (int s = 1; s < num_states; ++s) {
-      int state_score = forward[s][i] + backward[s][i];
-      if (state_score >= best_state_score) {
-        best_state = s;
-        best_state_score = state_score;
-      }
-      total_state_score = log_sum_log(total_state_score, state_score);
+    double fscore = 0;
+    for (int s = 0; s < fg_mode; ++s) {
+      fscore = log_sum_log(fscore,
+                           forward[s][i] + backward[s][i]);
     }
-
-    classes[i] = best_state;
-    llr_scores[i] = exp(best_state_score - total_state_score);
+    double bscore = forward[fg_mode][i] + backward[fg_mode][i];
+    double total_state_score = log_sum_log(fscore, bscore);
+    
+    
+    if (fscore > bscore) {
+      classes[i] = 0;
+      llr_scores[i] = exp(fscore - total_state_score);
+    } else {
+      classes[i] = fg_mode;
+      llr_scores[i] = exp(bscore - total_state_score);
+    }
+    
   }
 
   return total_score;
 }
+
+  
+double
+TwoVarHMM::ViterbiDecoding(const vector<pair<double, double> > &meth,
+                           const vector<size_t> &reset_points,
+                           vector<int> &classes) const {
+  
+  cerr << "[ENTER VITERBI DECODING]" << endl;
+  
+  // get log transition probability
+  vector<double> lp_start_trans = vector<double>(num_states, 0);
+  vector<double> lp_end_trans = vector<double>(num_states, 0);
+  vector< vector<double> > lp_trans =
+  vector< vector<double> >(num_states, vector<double>(num_states, 0));
+  
+  for (size_t i = 0; i < lp_start_trans.size(); ++i) {
+    lp_start_trans[i] = log(start_trans[i]);
+  }
+  for (size_t i = 0; i < lp_end_trans.size(); ++i) {
+    lp_end_trans[i] = log(end_trans[i]);
+  }
+  for (size_t i = 0; i < lp_trans.size(); ++i) {
+    lp_trans.resize(trans[i].size());
+    for (size_t j = 0; j < trans[i].size(); ++j) {
+      lp_trans[i][j] = log(trans[i][j]);
+    }
+  }
+  
+  classes.resize(meth.size());
+  double total_score = 0;
+  
+  for (size_t i = 0; i < reset_points.size() - 1; ++i) {
+    
+    const size_t start = reset_points[i];
+    const size_t lim = reset_points[i + 1] - start;
+    
+    matrix v(lim, vector<double> (num_states, 0));
+    vector<vector<size_t> > trace(lim, vector<size_t>(num_states, 0));
+    
+    for (size_t s = 0; s < num_states; ++s) {
+      v[0][s] = emission[s](meth[start]) + lp_start_trans[s];
+    }
+
+    
+    for (size_t j = 1; j < lim; ++j) {
+      
+      for (size_t s2 = 0; s2 < num_states; ++s2) {
+        trace[j][s2] = 0;
+        v[j][s2] = v[j-1][0] + lp_trans[0][s2] + emission[s2](meth[start+j]);
+        
+        for (size_t s1 = 1; s1 < num_states; ++s1) {
+          double new_score = v[j - 1][s1] + lp_trans[s1][s2] +
+                             emission[s2](meth[start + j]);
+          if (new_score >  v[j][s2]) {
+            v[j][s2] = new_score;
+            trace[j][s2] = s1;
+          }
+        }
+      }
+    }
+      
+    for (size_t s = 0; s < num_states; ++s) {
+      v[lim - 1][s] += lp_end_trans[s];
+    }
+    
+    // do the traceback
+    vector<double>::iterator max_iter;
+    max_iter = std::max_element(v[lim - 1].begin(), v[lim - 1].end());
+    classes[start + lim - 1] = std::distance(v[lim - 1].begin(), max_iter);
+
+    for (size_t j = lim - 1; j > 0; --j) {
+      classes[start + j - 1] = trace[j][classes[start + j]];
+    }
+    
+    total_score += *max_iter;
+    //std::cout << total_score << endl;
+  }
+  
+  cerr << "path likelihood: " << total_score << endl;
+  return total_score;
+}
+
 
