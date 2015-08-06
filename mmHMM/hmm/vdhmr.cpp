@@ -197,6 +197,43 @@ build_domains(const bool VERBOSE,
 }
 
 static void
+build_domains(const bool VERBOSE,
+              const vector<SimpleGenomicRegion> &cpgs,
+              const vector<size_t> &reset_points,
+              const vector<int> &classes,
+              vector<GenomicRegion> &domains) {
+  
+  size_t n_cpgs = 0, n_domains = 0, reset_idx = 1, prev_end = 0;
+  bool new_domain = true;
+  int prev_class = classes[0];
+  
+  for (size_t i = 0; i < classes.size(); ++i) {
+    if (classes[i] != prev_class) {
+      new_domain = true;
+    }
+    if (reset_points[reset_idx] == i) {
+      new_domain = true;
+      ++reset_idx;
+    }
+    if (new_domain){
+      if (i != 0) {
+        domains.back().set_end(prev_end);
+        domains.back().set_score(n_cpgs);
+      }
+      domains.push_back(GenomicRegion(cpgs[i]));
+      domains.back().set_name(toa(classes[i]));
+      n_cpgs = 1;
+      new_domain = false;
+    } else {
+      ++n_cpgs;
+    }
+    prev_end = cpgs[i].get_end();
+    prev_class = classes[i];
+  }
+}
+
+
+static void
 build_hmr_domains(const bool VERBOSE, const vector<GenomicRegion> &domains,
                   vector<GenomicRegion> &hmrs, const string bg_class) {
 
@@ -294,6 +331,7 @@ main(int argc, const char **argv) {
     // run mode flags
     bool VERBOSE = false;
     bool PARTIAL_METH = false;
+    bool VITERBI = false;
     
     // corrections for small values (not parameters):
     double tolerance = 1e-10;
@@ -321,8 +359,8 @@ main(int argc, const char **argv) {
                       false, mode_search_k);
     opt_parse.add_opt("itr", 'i', "max iterations", false, max_iterations);
     opt_parse.add_opt("verbose", 'v', "print more run info", false, VERBOSE);
-    opt_parse.add_opt("partial", '\0', "identify PMRs instead of HMRs", 
-		      false, PARTIAL_METH);
+    opt_parse.add_opt("viterbi", 'V', "viterbi decoding",
+                      false, VITERBI);
     opt_parse.add_opt("params-in", 'P', "HMM parameters file (no training)", 
 		      false, params_in_file);
     opt_parse.add_opt("params-out", 'p', "write HMM parameters to this file", 
@@ -404,11 +442,10 @@ main(int argc, const char **argv) {
     TwoVarHMM hmm(min_prob, tolerance, max_iterations, VERBOSE);
     hmm.set_parameters(fg_emission, bg_emission, fg_mode, bg_mode,
                        fg_p, bg_p, p_sf, p_sb, p_ft, p_bt);
-    double score = hmm.BaumWelchTraining(meth, reset_points);
     
     // HMM training
-    //if (max_iterations > 0)
-    //  hmm.BaumWelchTraining(meth, reset_points);
+    double score = hmm.BaumWelchTraining(meth, reset_points);
+    
 /*
     
     if (!params_out_file.empty()) {
@@ -421,48 +458,87 @@ main(int argc, const char **argv) {
      * STEP 5: DECODE THE DOMAINS
      */
     
-    vector<int> classes;
-    vector<double> scores;
-    hmm.PosteriorDecoding(meth, reset_points, classes, scores);
-    
-    
-    vector<double> domain_scores;
-    get_domain_scores(classes, meth, reset_points, domain_scores);
-    
-    
-    vector<double> random_scores;
-    shuffle_cpgs(hmm, meth, reset_points, random_scores);
-    
-    vector<double> p_values;
-    assign_p_values(random_scores, domain_scores, p_values);
-    
-    vector<GenomicRegion> domains;
-    build_domains(VERBOSE, cpgs, scores, reset_points, classes, domains);
-
-    vector<GenomicRegion> hmrs;
-    build_hmr_domains(VERBOSE, domains, hmrs, toa(fg_mode));
-    
-    // output HMR segments
-    if (!segments_file.empty()) {
-      std::ostream *out_seg = new std::ofstream(segments_file.c_str());
-      for (size_t i = 0; i < domains.size(); ++i) {
-        *out_seg << domains[i] << '\t' << p_values[i] << endl;
+    if (!VITERBI) {
+      vector<int> classes;
+      vector<double> scores;
+      hmm.PosteriorDecoding(meth, reset_points, classes, scores);
+      
+      
+      vector<double> domain_scores;
+      get_domain_scores(classes, meth, reset_points, domain_scores);
+      
+      
+      vector<double> random_scores;
+      shuffle_cpgs(hmm, meth, reset_points, random_scores);
+      
+      vector<double> p_values;
+      assign_p_values(random_scores, domain_scores, p_values);
+      
+      vector<GenomicRegion> domains;
+      build_domains(VERBOSE, cpgs, scores, reset_points, classes, domains);
+      
+      vector<GenomicRegion> hmrs;
+      build_hmr_domains(VERBOSE, domains, hmrs, toa(fg_mode));
+      
+      
+      
+      // output HMR segments
+      if (!segments_file.empty()) {
+        std::ostream *out_seg = new std::ofstream(segments_file.c_str());
+        for (size_t i = 0; i < domains.size(); ++i) {
+          *out_seg << domains[i] << '\t' << p_values[i] << endl;
+        }
       }
-    }
-    
-    // output HMRs
-    std::ostream *out = outfile.empty() ?
-                        &std::cout : new std::ofstream(outfile.c_str());
-    
-    for (size_t i = 0; i < hmrs.size(); ++i) {
-      *out << hmrs[i] << '\t' << 0 << endl;
-    }
-    
-    // output posterior probabilities
-    if (!scores_file.empty()) {
-      std::ostream *out_scores = new std::ofstream(scores_file.c_str());
+      
+      // output HMRs
+      std::ostream *out = outfile.empty() ?
+      &std::cout : new std::ofstream(outfile.c_str());
+      
+      for (size_t i = 0; i < hmrs.size(); ++i) {
+        *out << hmrs[i] << '\t' << 0 << endl;
+      }
+      
+      // output posterior probabilities
+      if (!scores_file.empty()) {
+        std::ostream *out_scores = new std::ofstream(scores_file.c_str());
+        for (size_t i = 0; i < cpgs.size(); ++i) {
+          *out_scores << cpgs[i] << '\t' << scores[i] << endl;
+        }
+      }
+      // output class
+      string class_file = outfile + ".class";
+      std::ostream *out_classes = new std::ofstream(class_file.c_str());
       for (size_t i = 0; i < cpgs.size(); ++i) {
-        *out_scores << cpgs[i] << '\t' << scores[i] << endl;
+        *out_classes << cpgs[i] << '\t' << classes[i] << endl;
+      }
+
+
+    }
+    else {
+      vector<int> classes;
+      hmm.ViterbiDecoding(meth, reset_points, classes);
+      
+      vector<GenomicRegion> domains;
+      build_domains(VERBOSE, cpgs, reset_points, classes, domains);
+      
+      vector<GenomicRegion> hmrs;
+      build_hmr_domains(VERBOSE, domains, hmrs, toa(fg_mode));
+      
+      
+      // output HMR segments
+      if (!segments_file.empty()) {
+        std::ostream *out_seg = new std::ofstream(segments_file.c_str());
+        for (size_t i = 0; i < domains.size(); ++i) {
+          *out_seg << domains[i] << endl;
+        }
+      }
+      
+      // output HMRs
+      std::ostream *out = outfile.empty() ?
+      &std::cout : new std::ofstream(outfile.c_str());
+      
+      for (size_t i = 0; i < hmrs.size(); ++i) {
+        *out << hmrs[i] << '\t' << 0 << endl;
       }
     }
     
