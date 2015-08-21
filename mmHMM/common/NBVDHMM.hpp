@@ -58,11 +58,18 @@ public:
   BaumWelchTraining(const vector<pair<double, double> > &meth,
                     const vector<size_t> &reset_points);
   
-  
   double
   PosteriorDecoding(const vector<pair<double, double> > &meth,
                     const vector<size_t> &reset_points,
                     vector<int> &classes, vector<double> &llr_scores);
+  
+  
+  double
+  PosteriorDecoding(const vector<pair<double, double> > &meth,
+                    const vector<size_t> &reset_points,
+                    vector<int> &classes, vector<double> &llr_scores,
+                    vector<vector<double> > &class_scores);
+  
   
   double
   ViterbiDecoding(const vector<pair<double, double> > &meth,

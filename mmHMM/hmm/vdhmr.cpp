@@ -107,15 +107,38 @@ separate_regions(const bool VERBOSE, const size_t desert_size,
   reads.erase(reads.begin() + j, reads.end());
   
   // segregate cpgs
+  vector<size_t> reset_points0;
   size_t prev_cpg = 0;
   for (size_t i = 0; i < cpgs.size(); ++i) {
     const size_t dist = (i > 0 && cpgs[i].same_chrom(cpgs[i - 1])) ?
     cpgs[i].get_start() - prev_cpg : numeric_limits<size_t>::max();
     if (dist > desert_size)
-      reset_points.push_back(i);
+      reset_points0.push_back(i);
     prev_cpg = cpgs[i].get_start();
   }
-  reset_points.push_back(cpgs.size());
+  reset_points0.push_back(cpgs.size());
+  
+  j = 0;
+  size_t i = 0;
+  while (i < reset_points0.size()-1) {
+    size_t left = reset_points0[i];
+    size_t right = reset_points0[i+1];
+    if ((right-left) > 20) {
+      reset_points.push_back(j+right-left);
+      for (size_t k=reset_points0[i]; k < reset_points0[i+1]; ++k) {
+        cpgs[j] = cpgs[k];
+        meth[j] = meth[k];
+        reads[j] = reads[k];
+        ++j;
+      }
+    }
+    i++;
+    
+  }
+  cpgs.erase(cpgs.begin() + j, cpgs.end());
+  meth.erase(meth.begin() + j, meth.end());
+  reads.erase(reads.begin() + j, reads.end());
+  
   if (VERBOSE)
     cerr << "CPGS RETAINED: " << cpgs.size() << endl
     << "DESERTS REMOVED: " << reset_points.size() - 2 << endl << endl;
@@ -461,7 +484,11 @@ main(int argc, const char **argv) {
     if (!VITERBI) {
       vector<int> classes;
       vector<double> scores;
-      hmm.PosteriorDecoding(meth, reset_points, classes, scores);
+      //hmm.PosteriorDecoding(meth, reset_points, classes, scores);
+      
+      vector<vector<double> > class_scores =
+        vector<vector<double> >(meth.size(), vector<double> (fg_mode+1, 0));
+      hmm.PosteriorDecoding(meth, reset_points, classes, scores, class_scores);
       
       
       vector<double> domain_scores;
@@ -506,10 +533,15 @@ main(int argc, const char **argv) {
         }
       }
       // output class
-      string class_file = outfile + ".class";
+      string class_file = outfile + ".hmrpp";
       std::ostream *out_classes = new std::ofstream(class_file.c_str());
       for (size_t i = 0; i < cpgs.size(); ++i) {
-        *out_classes << cpgs[i] << '\t' << classes[i] << endl;
+        *out_classes << cpgs[i] << '\t';
+        for (size_t j = 0; j <= fg_mode; ++j) {
+          *out_classes << class_scores[i][j] << '\t';
+        }
+        *out_classes << endl;
+        //*out_classes << cpgs[i] << '\t' << scores[i] << endl;
       }
 
 

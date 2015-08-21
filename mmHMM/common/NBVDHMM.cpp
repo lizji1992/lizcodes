@@ -523,8 +523,97 @@ TwoVarHMM::BaumWelchTraining(const vector<pair<double, double> > &meth,
 double
 TwoVarHMM::PosteriorDecoding(const vector<pair<double, double> > &meth,
                              const vector<size_t> &reset_points,
-                             vector<int> &classes, vector<double> &llr_scores) {
+                             vector<int> &classes, vector<double> &llr_scores){
   
+  //cerr << "[ENTER POSTERIOR DECODING]" << endl;
+  //cerr << fg_p << " ," << bg_p << " ," << p_sf << " ," << p_sb
+  //     << " ," << p_ft << " ," << p_bt << endl;
+  // prepare forward/backward vectors
+  size_t data_size = meth.size();
+  forward.resize(num_states);
+  backward.resize(num_states);
+  for (size_t i = 0; i < num_states; ++i) {
+    forward[i].resize(data_size);
+    backward[i].resize(data_size);
+  }
+  
+  // get log transition probability
+  vector<double> lp_start_trans = vector<double>(num_states, 0);
+  vector<double> lp_end_trans = vector<double>(num_states, 0);
+  vector< vector<double> > lp_trans =
+  vector< vector<double> >(num_states, vector<double>(num_states, 0));
+  
+  for (size_t i = 0; i < lp_start_trans.size(); ++i) {
+    lp_start_trans[i] = log(start_trans[i]);
+  }
+  for (size_t i = 0; i < lp_end_trans.size(); ++i) {
+    lp_end_trans[i] = log(end_trans[i]);
+  }
+  for (size_t i = 0; i < lp_trans.size(); ++i) {
+    lp_trans.resize(trans[i].size());
+    for (size_t j = 0; j < trans[i].size(); ++j) {
+      lp_trans[i][j] = log(trans[i][j]);
+    }
+  }
+  
+  double total_score = 0;
+  
+  for (size_t i = 0; i < reset_points.size() - 1; ++i) {
+    
+    const double forward_score =
+    forward_algorithm(meth, reset_points[i], reset_points[i + 1],
+                      lp_start_trans, lp_end_trans, lp_trans);
+    const double backward_score =
+    backward_algorithm(meth, reset_points[i], reset_points[i + 1],
+                       lp_start_trans, lp_end_trans, lp_trans);
+    
+    if (DEBUG && (fabs(forward_score - backward_score) /
+                  max(forward_score, backward_score)) > 1e-10)
+      cerr << "fabs(forward_score - backward_score)/"
+      << "max(forward_score, backward_score) > 1e-10" << endl;
+    
+    total_score += forward_score;
+  }
+  
+  classes.resize(data_size);
+  
+  llr_scores.resize(data_size);
+  
+  
+  for (size_t i = 0; i < data_size; ++i) {
+    
+    double fscore = forward[0][i] + backward[0][i];
+    for (int s = 1; s < fg_mode; ++s) {
+      fscore = log_sum_log(fscore,
+                           forward[s][i] + backward[s][i]);
+    }
+    //std::cout << fscore << " ";
+    double bscore = forward[fg_mode][i] + backward[fg_mode][i];
+    //std::cout << bscore << endl;
+    double total_state_score = log_sum_log(fscore, bscore);
+    
+    
+    if (fscore > bscore) {
+      classes[i] = 0;
+      llr_scores[i] = exp(fscore - total_state_score);
+    } else {
+      classes[i] = fg_mode;
+      llr_scores[i] = exp(bscore - total_state_score);
+    }
+    
+  }
+  
+  return total_score;
+}
+
+
+
+double
+TwoVarHMM::PosteriorDecoding(const vector<pair<double, double> > &meth,
+                             const vector<size_t> &reset_points,
+                             vector<int> &classes, vector<double> &llr_scores,
+                             vector<vector<double> > &class_scores) {
+                               
   //cerr << "[ENTER POSTERIOR DECODING]" << endl;
   //cerr << fg_p << " ," << bg_p << " ," << p_sf << " ," << p_sb
   //     << " ," << p_ft << " ," << p_bt << endl;
@@ -578,43 +667,18 @@ TwoVarHMM::PosteriorDecoding(const vector<pair<double, double> > &meth,
   classes.resize(data_size);
 
   llr_scores.resize(data_size);
-  /*
-  for (size_t i = 0; i < reset_points.size() - 1; ++i) {
-
-    size_t start = reset_points[i];
-    size_t end = reset_points[i+1];
-    
-    // Start decoding
-    
-    int prev_state = fg_mode;
-    for (size_t j = start; j < end; ++j) {
-      size_t best_state = prev_state;
-      double best_state_score = forward[best_state][j] + backward[best_state][j];
-      double total_state_score = best_state_score;
-      
-      int trans_state = prev_state == fg_mode ? 0 : prev_state + 1;
-      double trans_score = forward[trans_state][j] + backward[trans_state][j];
-      total_state_score = log_sum_log(total_state_score, trans_score);
-      if (trans_score >= best_state_score) {
-        best_state = trans_state;
-        best_state_score = trans_score;
-      }
-      classes[j] = best_state;
-      llr_scores[j] = exp(best_state_score - total_state_score);
-      prev_state = best_state;
-    }
-  }
-  */
   
   
   for (size_t i = 0; i < data_size; ++i) {
     
-    double fscore = 0;
-    for (int s = 0; s < fg_mode; ++s) {
+    double fscore = forward[0][i] + backward[0][i];
+    for (int s = 1; s < fg_mode; ++s) {
       fscore = log_sum_log(fscore,
                            forward[s][i] + backward[s][i]);
     }
+    //std::cout << fscore << " ";
     double bscore = forward[fg_mode][i] + backward[fg_mode][i];
+    //std::cout << bscore << endl;
     double total_state_score = log_sum_log(fscore, bscore);
     
     
@@ -624,6 +688,11 @@ TwoVarHMM::PosteriorDecoding(const vector<pair<double, double> > &meth,
     } else {
       classes[i] = fg_mode;
       llr_scores[i] = exp(bscore - total_state_score);
+    }
+    
+    for (int s = 0; s <= fg_mode; ++s) {
+      class_scores[i][s] = exp(forward[s][i] + backward[s][i]
+                               - total_state_score);
     }
     
   }
@@ -699,10 +768,12 @@ TwoVarHMM::ViterbiDecoding(const vector<pair<double, double> > &meth,
     vector<double>::iterator max_iter;
     max_iter = std::max_element(v[lim - 1].begin(), v[lim - 1].end());
     classes[start + lim - 1] = std::distance(v[lim - 1].begin(), max_iter);
-
+    std::cout << v[lim-1][classes[start + lim - 1]] << ", ";
     for (size_t j = lim - 1; j > 0; --j) {
       classes[start + j - 1] = trace[j][classes[start + j]];
+      std::cout << v[j-1][classes[start + j - 1]] << ", ";
     }
+    std::cout << endl;
     
     total_score += *max_iter;
     //std::cout << total_score << endl;
