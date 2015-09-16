@@ -145,8 +145,6 @@ TwoVarHMM::forward_algorithm(const vector<pair<double, double> > &meth,
         const vector<double> &lp_s, const vector<double> &lp_t,
         const vector< vector<double> > &lp_trans) {
   
-  //cerr << "[ENTER FORWARD COMPUTING]" << endl;
-  //cerr << start << ", " << end << endl;
   
   for (size_t i = 0; i < num_states; ++i) {
     forward[i][start] = emission[i](meth[start]) + lp_s[i];
@@ -160,17 +158,14 @@ TwoVarHMM::forward_algorithm(const vector<pair<double, double> > &meth,
       for (size_t s1 = 1; s1 < num_states; ++s1) {
         forward[s2][i] = log_sum_log(forward[s2][i],
                                      forward[s1][k] + lp_trans[s1][s2] + emission[s2](meth[i]));
-       // std::cout << i << " ,"  << s1 << " - " << s2 << " : " << forward[s2][i] << endl;
 
       }
-//      forward[s2][i] += emission[s2](meth[i]);
     }
   }
   double forward_score = forward[0][end - 1] + lp_t[0];
   for (size_t s = 1; s < num_states; ++s) {
     forward_score = log_sum_log(forward_score, forward[s][end-1] + lp_t[s]);
   }
-  
   return forward_score;
 }
 
@@ -181,9 +176,6 @@ TwoVarHMM::backward_algorithm(const vector<pair<double, double> > &meth,
 				const vector<double> &lp_s, const vector<double> &lp_t,
 				const vector< vector<double> > &lp_trans) {
   
-  //cerr << "[ENTER BACKWARD COMPUTING]" << endl;
-  //cerr << start << ", " << end << ", " << backward.size() << ", "
-  //<< backward[0].size() << endl;
   for (size_t i = 0; i < num_states; ++i) {
     backward[i][end - 1] = lp_t[i];
   }
@@ -194,18 +186,13 @@ TwoVarHMM::backward_algorithm(const vector<pair<double, double> > &meth,
     for (size_t s1 = 0; s1 < num_states; ++s1) {
       backward[s1][i] = backward[0][k] + lp_trans[s1][0] + emission[0](meth[k]);
       for (size_t s2 = 1; s2 < num_states; ++s2) {
-        //<< "log "<< backward[s1][i] << "+" 
-        //<< " log " << backward[s2][k]  << "+" << lp_trans[s1][s2] << "+" << emission[s2](meth[k]);
         backward[s1][i] = log_sum_log(backward[s1][i],
                                       backward[s2][k] + lp_trans[s1][s2] +
                                       emission[s2](meth[k]));
-        //std::cout << "s1:" << s1 << " s2:" << i << backward[s1][i] << endl;
-        //std::cout << "=" << backward[s1][i] << endl;
-        //if (!isfinite(lp_trans[s1][s2]))
       }
+
     }
   }
- //cerr << endl;
   double backward_score = backward[0][start] + emission[0](meth[start])+lp_s[0];
 
   for (size_t s = 1; s < num_states; ++s) {
@@ -224,15 +211,12 @@ TwoVarHMM::update_trans_estimator(const vector<pair<double, double> > &meth,
                                 const double total, vector<matrix> &te,
                                 const vector<vector<double> > &lp_trans) const {
   
-  //cerr << "[UPDATE TRANS ESTIMATOR]" << endl;
   for (size_t i = start + 1; i < end; ++i) {
     const size_t k = i - 1;
     for(size_t x = 0; x < num_states; ++x) {
       for (size_t y = 0; y < num_states; ++y) {
         te[x][y][k] = forward[x][k] + lp_trans[x][y] + emission[y](meth[i])
                       + backward[y][i] - total;
-//        if (y != 0 && (y-x) > 1 && isfinite(te[x][y][k]))
-  //        std::cout << "x:" << x << " y:" << y << " k:" << k << " : " << te[x][y][k] << endl;
       }
     }
   }
@@ -242,7 +226,6 @@ TwoVarHMM::update_trans_estimator(const vector<pair<double, double> > &meth,
 
 void
 TwoVarHMM::update_transitions(const vector<matrix> &te) {
-  //cerr << "[UPDATE TRANSITIONS]" << endl;
   size_t T = te[0][0].size();
   
   // Subtracting 1 from the limit of the summation because the final
@@ -276,10 +259,8 @@ TwoVarHMM::update_transitions(const vector<matrix> &te) {
   bg_p = p_bg_out/bg_denom -
          std::accumulate(end_trans.begin()+fg_mode, end_trans.end(), 0) / 2;
   
-  // estimate start probabilities ????
   p_sf = (bg_p + 1 - fg_p)/2.0;
   p_sb = (1 - bg_p + fg_p)/2.0;
-  //p_sf = exp(log_sum_log(te[0][0][0], te[0][1][0]));
   
 }
 
@@ -287,7 +268,6 @@ TwoVarHMM::update_transitions(const vector<matrix> &te) {
 void
 TwoVarHMM::estimate_emissions(const vector<double> &meth_lp,
                               const vector<double> &unmeth_lp) {
-  //cerr << "[ESTIMATE EMISSIONS]" << endl;
   vector<double> fg_probs(meth_lp.size());
   vector<double> bg_probs(meth_lp.size());
   
@@ -309,10 +289,7 @@ TwoVarHMM::estimate_emissions(const vector<double> &meth_lp,
     
     fg_probs[i] = exp(fg - denom);
     bg_probs[i] = exp(bg - denom);
-    //cerr << forward[0][i] << " " << backward[0][i] << ", ";
-    //cerr << fg_probs[i] << " " << bg_probs[i] << ", ";
   }
-  // cerr << endl;
   
   fg_emission.fit(meth_lp, unmeth_lp, fg_probs);
   bg_emission.fit(meth_lp, unmeth_lp, bg_probs);
@@ -326,14 +303,10 @@ TwoVarHMM::single_iteration(const vector<pair<double, double> > &meth,
                             const vector<double> &meth_lp,
                             const vector<double> &unmeth_lp) {
   
-  //std::cout << "[ENTER SINGLE ITERATION]" << endl;
-  
   double total_score = 0;
   
   // prepare forward/backward vectors
   size_t data_size = meth.size();
-  //forward = matrix(num_states, vector<double>(data_size, 0));
-  //backward = matrix(num_states, vector<double>(data_size, 0));
   forward.resize(num_states);
   backward.resize(num_states);
   for (size_t i = 0; i < num_states; ++i) {
@@ -357,11 +330,8 @@ TwoVarHMM::single_iteration(const vector<pair<double, double> > &meth,
     lp_trans.resize(trans[i].size());
     for (size_t j = 0; j < trans[i].size(); ++j) {
       lp_trans[i][j] = log(trans[i][j]);
-     // cerr << lp_trans[i][j] << " ";
     }
-   // cerr << endl;
   }
-  //cerr << endl;
   
   // for estimating transitions
   vector<matrix> te(num_states,
@@ -391,7 +361,7 @@ TwoVarHMM::single_iteration(const vector<pair<double, double> > &meth,
   update_transitions(te);
 
   estimate_emissions(meth_lp, unmeth_lp);
-  
+
   return total_score;
 }
 
@@ -429,11 +399,8 @@ TwoVarHMM::compute_likelihood(const vector<pair<double, double> > &meth,
     lp_trans.resize(trans[i].size());
     for (size_t j = 0; j < trans[i].size(); ++j) {
       lp_trans[i][j] = log(trans[i][j]);
-      // std::cout << lp_trans[i][j] << " ";
     }
-    //  std::cout << endl;
   }
-  // std::cout << endl;
 
   // forward/backward algorithm
   for (size_t i = 0; i < reset_points.size() - 1; ++i) {
@@ -513,7 +480,6 @@ TwoVarHMM::BaumWelchTraining(const vector<pair<double, double> > &meth,
       break;
     }
     prev_score = score;
-    // cerr << "END ITERATION " << i+1 << endl;
   }
   
   return prev_score;
@@ -525,10 +491,7 @@ TwoVarHMM::PosteriorDecoding(const vector<pair<double, double> > &meth,
                              const vector<size_t> &reset_points,
                              vector<int> &classes, vector<double> &llr_scores){
   
-  //cerr << "[ENTER POSTERIOR DECODING]" << endl;
-  //cerr << fg_p << " ," << bg_p << " ," << p_sf << " ," << p_sb
-  //     << " ," << p_ft << " ," << p_bt << endl;
-  // prepare forward/backward vectors
+
   size_t data_size = meth.size();
   forward.resize(num_states);
   backward.resize(num_states);
@@ -587,9 +550,7 @@ TwoVarHMM::PosteriorDecoding(const vector<pair<double, double> > &meth,
       fscore = log_sum_log(fscore,
                            forward[s][i] + backward[s][i]);
     }
-    //std::cout << fscore << " ";
     double bscore = forward[fg_mode][i] + backward[fg_mode][i];
-    //std::cout << bscore << endl;
     double total_state_score = log_sum_log(fscore, bscore);
     
     
@@ -614,10 +575,6 @@ TwoVarHMM::PosteriorDecoding(const vector<pair<double, double> > &meth,
                              vector<int> &classes, vector<double> &llr_scores,
                              vector<vector<double> > &class_scores) {
                                
-  //cerr << "[ENTER POSTERIOR DECODING]" << endl;
-  //cerr << fg_p << " ," << bg_p << " ," << p_sf << " ," << p_sb
-  //     << " ," << p_ft << " ," << p_bt << endl;
-  // prepare forward/backward vectors
   size_t data_size = meth.size();
   forward.resize(num_states);
   backward.resize(num_states);
@@ -676,9 +633,7 @@ TwoVarHMM::PosteriorDecoding(const vector<pair<double, double> > &meth,
       fscore = log_sum_log(fscore,
                            forward[s][i] + backward[s][i]);
     }
-    //std::cout << fscore << " ";
     double bscore = forward[fg_mode][i] + backward[fg_mode][i];
-    //std::cout << bscore << endl;
     double total_state_score = log_sum_log(fscore, bscore);
     
     
@@ -752,7 +707,7 @@ TwoVarHMM::ViterbiDecoding(const vector<pair<double, double> > &meth,
         for (size_t s1 = 1; s1 < num_states; ++s1) {
           double new_score = v[j - 1][s1] + lp_trans[s1][s2] +
                              emission[s2](meth[start + j]);
-          if (new_score >  v[j][s2]) {
+          if (new_score >=  v[j][s2]) {
             v[j][s2] = new_score;
             trace[j][s2] = s1;
           }
@@ -768,15 +723,11 @@ TwoVarHMM::ViterbiDecoding(const vector<pair<double, double> > &meth,
     vector<double>::iterator max_iter;
     max_iter = std::max_element(v[lim - 1].begin(), v[lim - 1].end());
     classes[start + lim - 1] = std::distance(v[lim - 1].begin(), max_iter);
-    std::cout << v[lim-1][classes[start + lim - 1]] << ", ";
     for (size_t j = lim - 1; j > 0; --j) {
       classes[start + j - 1] = trace[j][classes[start + j]];
-      std::cout << v[j-1][classes[start + j - 1]] << ", ";
     }
-    std::cout << endl;
     
     total_score += *max_iter;
-    //std::cout << total_score << endl;
   }
   
   cerr << "path likelihood: " << total_score << endl;
