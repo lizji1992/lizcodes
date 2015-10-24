@@ -1,6 +1,6 @@
 #    Makefile for subHMR
 #
-#    Copyright (C) 2014 Andrew D. Smith
+#    Copyright (C) 2015-2016 Andrew D. Smith
 #
 #    Authors: Andrew D. Smith
 #

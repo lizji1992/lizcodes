@@ -1,7 +1,7 @@
 /*    inverted-dups: a program for doing quality control relative to
  *    the inverted duplicates reads problem and masking "bad" reads if needed.
  *
- *    Copyright (C) 2014 University of Southern California and
+ *    Copyright (C) 2015-2016 University of Southern California and
  *                       Andrew D. Smith, Liz Ji and Jenny Qu
  *
  *    Authors: Andrew D. Smith, Liz Ji and Jenny Qu

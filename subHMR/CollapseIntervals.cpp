@@ -1,6 +1,6 @@
 /*    subUnitFiner: 
  *
- *    Copyright (C) 2014 Andrew D. Smith
+ *    Copyright (C) 2015-2016 Andrew D. Smith
  *    Authors: Andrew D. Smith and Liz Ji
  *
  *    This program is free software: you can redistribute it and/or modify
