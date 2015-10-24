@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015-2016 Cold Spring Harbor Laboratory
+  Copyright (C) 2008 Cold Spring Harbor Laboratory
   Authors: Andrew D. Smith
 
   This file is part of methpipe.
@@ -361,6 +361,54 @@ TwoVarHMM::single_iteration(const vector<pair<double, double> > &meth,
   update_transitions(te);
 
   estimate_emissions(meth_lp, unmeth_lp);
+
+  return total_score;
+}
+
+
+double
+TwoVarHMM::compute_likelihood(const vector<pair<double, double> > &meth,
+                              const vector<size_t> &reset_points,
+                              const vector<double> &meth_lp,
+                              const vector<double> &unmeth_lp) {
+  
+  double total_score = 0;
+  
+  // prepare forward/backward vectors
+  size_t data_size = meth.size();
+  forward.resize(num_states);
+  backward.resize(num_states);
+  for (size_t i = 0; i < num_states; ++i) {
+    forward[i].resize(data_size);
+    backward[i].resize(data_size);
+  }
+  
+  // get log transition probability
+  vector<double> lp_start_trans = vector<double>(num_states, 0);
+  vector<double> lp_end_trans = vector<double>(num_states, 0);
+  vector< vector<double> > lp_trans =
+  vector< vector<double> >(num_states, vector<double>(num_states, 0));
+  
+  for (size_t i = 0; i < lp_start_trans.size(); ++i) {
+    lp_start_trans[i] = log(start_trans[i]);
+  }
+  for (size_t i = 0; i < lp_end_trans.size(); ++i) {
+    lp_end_trans[i] = log(end_trans[i]);
+  }
+  for (size_t i = 0; i < lp_trans.size(); ++i) {
+    lp_trans.resize(trans[i].size());
+    for (size_t j = 0; j < trans[i].size(); ++j) {
+      lp_trans[i][j] = log(trans[i][j]);
+    }
+  }
+
+  // forward/backward algorithm
+  for (size_t i = 0; i < reset_points.size() - 1; ++i) {
+    const double forward_score =
+    forward_algorithm(meth, reset_points[i], reset_points[i + 1],
+                      lp_start_trans, lp_end_trans, lp_trans);
+    total_score += forward_score;
+  }
 
   return total_score;
 }

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2008 Cold Spring Harbor Laboratory
+  Copyright (C) 2015-2016 Cold Spring Harbor Laboratory
   Authors: Andrew D. Smith
 
   This file is part of methpipe.

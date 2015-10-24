@@ -19,6 +19,8 @@
 using std::vector;
 using std::string;
 
+typedef vector< vector<double> > matrix;
+
 // struct BetaBin;
 struct BetaBin
 {
@@ -54,6 +56,68 @@ struct NegBin
   double p; // prob of failure
   double r_log_p_minus_lngamma_r; // helper
 };
+
+
+//////////////////////////////////////////////
+//////       struct CTHMM duration      //////
+//////////////////////////////////////////////
+
+
+class ExpTransEstimator {
+public:
+  
+  ExpTransEstimator() : a(0.02), b(0.002),
+                        step_size(0.01), tolerance(1e-10) {}
+  ExpTransEstimator(const double _a,
+                    const double _b) : a(_a), b(_b),
+                                       step_size(0.01), tolerance(1e-10) {}
+  ExpTransEstimator(const double _a, const double _b, const double s,
+                    const double t) : a(_a), b(_b),
+                                      step_size(s), tolerance(t) {}
+  
+  void set_stepsize(const double s) {step_size = s;}
+  void set_tolerance(const double t) {tolerance = t;}
+  
+  double get_a() const {return a;}
+  double get_b() const {return b;}
+  
+  
+  // GRADIENT ASCENT METHOD
+  void mle_GradAscent(const matrix &r, const vector<size_t> &t);
+  void GA_stepforward(const double grad_a, const double grad_b,
+                      const double &old_llh, double &new_llh,
+                      const matrix &r, const vector<size_t> &t);
+
+private:
+  
+  void calc_internal_data(const vector<size_t> &t, const double u,
+                          const double v, vector<double> &log_a,
+                          vector<double> &log_1_a,
+                          vector<double> &neg_bt) const;
+  double calc_log_llh(const matrix &r, const vector<double> &log_a,
+                      const vector<double> &log_1_a,
+                      const vector<double> &neg_bt) const;
+  
+  double llh_grad_a(const matrix &lr, const vector<double> &neg_bt) const;
+  double llh_grad_b(const matrix &lr, const vector<double> &neg_bt) const;
+
+  
+  //  parameters
+  double a, b;
+  double step_size;
+  double tolerance;
+  
+};
+
+//////////////////////////////////////////////
+//////       numerical                  //////
+//////////////////////////////////////////////
+
+inline double
+log_sum_log(const double p, const double q);
+
+inline double
+log_sub_log(const double p, const double q);
 
 /*
 class NegBinomDistro : public Distro_ {

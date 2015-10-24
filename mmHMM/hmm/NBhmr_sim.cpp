@@ -1,5 +1,5 @@
 /* HMR simulator
- * Song Qiang <qiang.song@usc.edu> 2011
+ * Song Qiang <qiang.song@usc.edu> 2015-2016
  *
  * No coordinates of CpGs are taken into consideration. The simualted CpGs are 
  * put onto "1,2,3,4,5 ..." of "chromosome Z" in the output.

@@ -1,7 +1,7 @@
 /*
  *  Continuous-time Variable-duration HMM
  *
- * Copyright (C) 2009-2012 University of Southern California
+ * Copyright (C) 2015-2016 University of Southern California
  *                         Andrew D Smith
  * Author: Andrew D. Smith, Song Qiang
  *
