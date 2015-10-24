@@ -1,5 +1,5 @@
 # 
-#  Copyright (C) 2008 Cold Spring Harbor Laboratory
+#  Copyright (C) 2015-2016 University of Southern California
 #  Authors: Andrew D. Smith
 # 
 #  This file is part of rmap.
@@ -30,7 +30,8 @@ INCLUDEARGS = $(addprefix -I,$(INCLUDEDIRS))
 INCLUDEARGS += -I/usr/local/include
 LIBS = -L/usr/local/lib -lgsl -lgslcblas
 
-PROGS = vdhmr vdhmr_bf NBhmr_sim
+#PROGS = vdhmr vdhmr_bf NBhmr_sim collapse_segs estimate_exp
+PROGS = cthmm
 
 CXX = g++
 CFLAGS = -Wall -fPIC -fmessage-length=50
@@ -62,11 +63,13 @@ all: $(PROGS)
 $(PROGS): $(addprefix $(SMITHLAB_CPP)/, \
 	smithlab_os.o smithlab_utils.o GenomicRegion.o OptionParser.o)
 
-vdhmr: $(addprefix $(COMMON_DIR)/, NBVDHMM.o distribution.o)
-vdhmr_bf: $(addprefix $(COMMON_DIR)/, NBVDHMM_BF.o distribution.o)
+cthmm: $(addprefix $(COMMON_DIR)/, 2DCTHMM.o distribution.o)
 
-NBhmr_sim: $(addprefix $(SMITHLAB_CPP)/, RNG.o Smoothing.o)
-NBhmr_sim: $(addprefix $(COMMON_DIR)/, Distro.o)
+#vdhmr: $(addprefix $(COMMON_DIR)/, NBVDHMM.o distribution.o)
+#vdhmr_bf: $(addprefix $(COMMON_DIR)/, NBVDHMM_BF.o distribution.o)
+
+#NBhmr_sim: $(addprefix $(SMITHLAB_CPP)/, RNG.o Smoothing.o)
+#NBhmr_sim: $(addprefix $(COMMON_DIR)/, Distro.o)
 
 
 %.o: %.cpp %.hpp
