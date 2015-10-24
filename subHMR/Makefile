@@ -18,10 +18,14 @@
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-SMITHLAB_CPP = ../smithlab_cpp
+ifndef SMITHLAB_CPP
+$(error Must define SMITHLAB_CPP variable)
+endif
+
 SUBHMR_LIBDIR = ./lib
 
-PROGS = SubunitFinder UnitSignal CollapseIntervals BinarizeCpG AssignCpGs
+PROGS = SubunitFinder UnitSignal CollapseIntervals BinarizeCpG AssignCpGs \
+				DetectBreaks
 SOURCES = $(wildcard *.cpp)
 
 INCLUDEDIRS = $(SMITHLAB_CPP) $(SUBHMR_LIBDIR)
