@@ -45,7 +45,17 @@ using std::isfinite;
 
 typedef vector< vector<double> > matrix;
 
+
 ////////////////////////////////////////////////////////////////////////
+
+template <class T> void
+select_vector_elements(const vector<T> &fullset, vector<T> &subset,
+                       const vector<size_t> &index) {
+  for (size_t i = 0; i < index.size(); ++i) {
+    subset.push_back(fullset[index[i]]);
+  }
+}
+
 ////////////////////////////////////////////////////////////////////////
 
 void
@@ -109,6 +119,7 @@ TwoVarHMM::forward_algorithm(const vector<pair<double, double> > &meth,
                              const double lp_sf, const double lp_sb,
                              const double lp_ft, const double lp_bt,
                              matrix &ltp) {
+  //cerr << "ENTER FORWARD COMPUTATION" << endl;
   
   const size_t end = forward[0].size();
   
@@ -116,11 +127,14 @@ TwoVarHMM::forward_algorithm(const vector<pair<double, double> > &meth,
   forward[1][0] = fg_emission(meth[0]) + lp_sf; // foreground
   
   for (size_t i = 1; i < end; ++i) {
+
     const size_t k = i - 1;
     const size_t dist = time[i] - time[k];
     
     const double ff = a + (1 - a) * exp(-(b * dist));
     const double bb = 1 - a + a * exp(-(b * dist));
+    //std::cout << a << "; " << b << "; " << dist << endl;
+    //std::cout << bb << ", " << 1 - bb << ", " << 1 - ff << ", " << ff << endl;
     
     const double lp_ff = log(ff);
     const double lp_fb = log(1 - ff);
@@ -137,9 +151,12 @@ TwoVarHMM::forward_algorithm(const vector<pair<double, double> > &meth,
     // foreground
     forward[1][i] = (fg_emission(meth[i]) +
                      log_sum_log(forward[0][k] + lp_bf, forward[1][k] + lp_ff));
+    //std::cout << meth[i].first << " , " << meth[i].second << endl;
+
   }
   
   return log_sum_log(forward[0][end - 1] + lp_bt, forward[1][end - 1] + lp_ft);
+  
 }
 
 
@@ -150,6 +167,9 @@ TwoVarHMM::backward_algorithm(const vector<pair<double, double> > &meth,
                               const double lp_sf, const double lp_sb,
                               const double lp_ft, const double lp_bt,
                               const matrix &ltp) {
+  
+  //cerr << "ENTER BACKWARD COMPUTATION" << endl;
+
   
   const size_t end = backward[0].size();
   
@@ -182,18 +202,34 @@ TwoVarHMM::backward_algorithm(const vector<pair<double, double> > &meth,
 void
 TwoVarHMM::update_trans_estimator(const vector<pair<double, double> > &meth,
                                   const double total, matrix &te,
-                                  const matrix &ltp) const {
+                                  matrix &r, const matrix &ltp) const {
   
+  //cerr << "ENTER TRANST ESTIMATRO UPDATION" << endl;
+
   for (size_t i = 0; i < te[0].size() - 1; ++i) {
     const size_t j = i + 1;
     te[0][i] = forward[0][i] + ltp[0][i] + bg_emission(meth[j])
                + backward[0][j] - total;
+    double denom = te[0][i];
+    
     te[1][i] = forward[0][i] + ltp[1][i] + fg_emission(meth[j])
                + backward[1][j] - total;
+    denom = log_sum_log(denom, te[1][i]);
+    
     te[2][i] = forward[1][i] + ltp[2][i] + bg_emission(meth[j])
                + backward[0][j] - total;
+    denom = log_sum_log(denom, te[2][i]);
+
+    
     te[3][i] = forward[1][i] + ltp[3][i] + fg_emission(meth[j])
                + backward[1][j] - total;
+    denom = log_sum_log(denom, te[3][i]);
+
+    r[0][i] = exp(te[0][i] - denom);
+    r[1][i] = exp(te[1][i] - denom);
+    r[2][i] = exp(te[2][i] - denom);
+    r[3][i] = exp(te[3][i] - denom);
+    
    // std::cout << te[0][i] << " " << te[1][i]
    //           << " " << te[2][i] << " " << te[3][i] << endl;
    }
@@ -227,29 +263,66 @@ TwoVarHMM::update_endprob(matrix &te) {
 
 
 void
-TwoVarHMM::estimate_emissions(const vector<double> &meth_lp,
+TwoVarHMM::update_imputed_methylv(vector<pair<double, double> > &meth,
+                                  const vector<double> &fg_probs,
+                                  const vector<double> &bg_probs) const {
+  //cerr << "here" << endl;
+  for (size_t i = 0; i < fg_probs.size(); ++i) {
+    if (meth[i].second < 0) {
+      meth[i].first = (bg_probs[i] * meth[i].first) /
+      (bg_probs[i] * meth[i].first + fg_probs[i] * (1 - meth[i].first));
+      //std::cout << bg_probs[i] << ", " << fg_probs[i] << ", "
+      //          << meth[i].first << endl;
+    }
+  }
+}
+
+
+
+void
+TwoVarHMM::estimate_emissions(vector<pair<double, double> > &meth,
+                              const vector<double> &meth_lp,
                               const vector<double> &unmeth_lp) {
   
-  vector<double> fg_probs(meth_lp.size());
-  vector<double> bg_probs(meth_lp.size());
+  vector<double> fg_probs(meth_lp.size(), 0);
+  vector<double> bg_probs(unmeth_lp.size(), 0);
   
   for (size_t i = 0; i < forward[0].size(); ++i) {
     const double bg = (forward[0][i] + backward[0][i]);
     const double fg = (forward[1][i] + backward[1][i]);
     const double denom = log_sum_log(fg, bg);
-
-    fg_probs[i] = exp(fg - denom);
     bg_probs[i] = exp(bg - denom);
+    fg_probs[i] = exp(fg - denom);
   }
   
-  fg_emission.fit(meth_lp, unmeth_lp, fg_probs);
-  bg_emission.fit(meth_lp, unmeth_lp, bg_probs);
+  if (TRAINIMPUT) {
+    vector<double> cmeth_lp;
+    vector<double> cunmeth_lp;
+    vector<double> cfg_probs;
+    vector<double> cbg_probs;
+    select_vector_elements(meth_lp, cmeth_lp, cov_idx);
+    select_vector_elements(unmeth_lp, cunmeth_lp, cov_idx);
+    select_vector_elements(fg_probs, cfg_probs, cov_idx);
+    select_vector_elements(bg_probs, cbg_probs, cov_idx);
+    
+    fg_emission.fit(cmeth_lp, cunmeth_lp, cfg_probs);
+    bg_emission.fit(cmeth_lp, cunmeth_lp, cbg_probs);
+    
+    update_imputed_methylv(meth, fg_probs, bg_probs);
+  }
+  else {  // NO IMPUTATED DATA POINTS
+    //cerr << "ENTER EMISSION FITTING: " << meth_lp.size()
+    //<< " " << unmeth_lp.size() << " " << fg_probs[0] << endl;
+    fg_emission.fit(meth_lp, unmeth_lp, fg_probs);
+    bg_emission.fit(meth_lp, unmeth_lp, bg_probs);
+  }
+  
 }
 
-  
+
 
 double
-TwoVarHMM::single_iteration(const vector<pair<double, double> > &meth,
+TwoVarHMM::single_iteration(vector<pair<double, double> > &meth,
                             const vector<size_t> &time,
                             const vector<double> &meth_lp,
                             const vector<double> &unmeth_lp) {
@@ -259,22 +332,7 @@ TwoVarHMM::single_iteration(const vector<pair<double, double> > &meth,
   const double lp_ft = log(p_ft);
   const double lp_bt = log(p_bt);
   
-  
-  // prepare internal data structures
-  size_t data_size = meth.size();
-  forward.resize(2);
-  backward.resize(2);
-  for (size_t i = 0; i < 2; ++i) {
-    forward[i].resize(data_size);
-    backward[i].resize(data_size);
-  }
-  
-  ltp.resize(4);
-  for (int i = 0; i < 4; ++i) {
-    ltp[i].resize(data_size - 1);
-  }
-  
-  
+  //cerr << "ENTER NEW ITERATION" << endl;
   // forward/backward algorithm
   const double forward_score =
       forward_algorithm(meth, time, lp_sf, lp_sb, lp_ft, lp_bt, ltp);
@@ -290,21 +348,26 @@ TwoVarHMM::single_iteration(const vector<pair<double, double> > &meth,
   
   double
   total_score = forward_score;
-
+  
   // update emission
-  estimate_emissions(meth_lp, unmeth_lp);
+  estimate_emissions(meth, meth_lp, unmeth_lp);
   
   
   // update transition parameters
-  matrix te(4, vector<double> (meth.size(), 0));
-  update_trans_estimator(meth, forward_score, te, ltp);
   
-  ExpTransEstimator estimate_trans(a, b);
-  estimate_trans.mle_GradAscent(te, time);
-  a = estimate_trans.get_a();
-  b = estimate_trans.get_b();
-  fg_rate = a * b;
-  bg_rate = b - fg_rate;
+  matrix te(4, vector<double> (meth.size(), 0));
+  matrix r(4, vector<double> (meth.size(), 0));
+  update_trans_estimator(meth, forward_score, te, r, ltp);
+  
+  if (!NO_RATE_EST) {
+    ExpTransEstimator estimate_trans(a, b);
+    estimate_trans.mle_GradAscent(r, time);
+    a = estimate_trans.get_a();
+    b = estimate_trans.get_b();
+    fg_rate = a * b;
+    bg_rate = b - fg_rate;
+  }
+
   update_endprob(te);
   
   return total_score;
@@ -313,19 +376,51 @@ TwoVarHMM::single_iteration(const vector<pair<double, double> > &meth,
 
 
 double
-TwoVarHMM::BaumWelchTraining(const vector<pair<double, double> > &meth,
+TwoVarHMM::BaumWelchTraining(vector<pair<double, double> > &meth,
                              const vector<size_t> &time) {
   
   cerr << "[ENTER BM-TRAINING]" << endl;
   
   vector<double> meth_lp(meth.size()), unmeth_lp(meth.size());
-  for (size_t i = 0; i < meth.size(); ++i) {
-    meth_lp[i] =
-    log(min(max(meth[i].first/(meth[i].first + meth[i].second), 1e-2),
-            1.0 - 1e-2));
-    unmeth_lp[i] =
-    log(1 - min(max(meth[i].first/(meth[i].first + meth[i].second), 1e-2),
+  if (TRAINIMPUT) // imputation needed: some cpgs are not covered
+    for (size_t i = 0; i < meth.size(); ++i) {
+      if (meth[i].second < 0) { // missing data
+        meth_lp[i] = log(min(max(meth[i].first, 1e-2), 1.0 - 1e-2));
+        unmeth_lp[i] = 0;
+      }
+      else { // covered data
+        meth_lp[i] =
+        log(min(max(meth[i].first/(meth[i].first + meth[i].second), 1e-2),
                 1.0 - 1e-2));
+        unmeth_lp[i] =
+        log(1 - min(max(meth[i].first/(meth[i].first + meth[i].second), 1e-2),
+                    1.0 - 1e-2));
+      }
+    }
+  else { // all cpgs are covered
+    for (size_t i = 0; i < meth.size(); ++i) {
+      meth_lp[i] =
+      log(min(max(meth[i].first/(meth[i].first + meth[i].second), 1e-2),
+              1.0 - 1e-2));
+      unmeth_lp[i] =
+      log(1 - min(max(meth[i].first/(meth[i].first + meth[i].second), 1e-2),
+                  1.0 - 1e-2));
+    
+    }
+  }
+
+  
+  size_t data_size = meth.size();
+  forward.resize(2);
+  backward.resize(2);
+  for (size_t i = 0; i < 2; ++i) {
+    forward[i].resize(data_size, 0);
+    backward[i].resize(data_size, 0);
+  }
+  
+  ltp.resize(4);
+  for (int i = 0; i < 4; ++i) {
+    ltp[i].resize(data_size - 1, 0);
   }
   
   
@@ -368,7 +463,7 @@ TwoVarHMM::BaumWelchTraining(const vector<pair<double, double> > &meth,
       << endl;
     }
     
-    if ((score - prev_score) < tolerance) {
+    if ((score - prev_score) < tolerance && score > prev_score) {
       if (VERBOSE)
         cerr << "CONVERGED" << endl << endl;
       break;
@@ -382,11 +477,13 @@ TwoVarHMM::BaumWelchTraining(const vector<pair<double, double> > &meth,
 
 
 double
-TwoVarHMM::PosteriorDecoding(const vector<pair<double, double> > &meth,
+TwoVarHMM::PosteriorDecoding(vector<pair<double, double> > &meth,
                              const vector<size_t> &time,
-                             vector<int> &classes, vector<double> &llr_scores){
+                             vector<int> &classes, vector<double> &llr_scores,
+                             bool IMPUT){
   
-
+  //cerr << "ENTER POSTERIOR DECODING" << endl;
+  
   size_t data_size = meth.size();
   forward.resize(2);
   backward.resize(2);
@@ -410,6 +507,8 @@ TwoVarHMM::PosteriorDecoding(const vector<pair<double, double> > &meth,
   
   const double backward_score =
       backward_algorithm(meth, time, lp_sf, lp_sb, lp_ft, lp_bt, ltp);
+  //cerr << "FINISH BACKWARD COMPUTATION" << endl;
+
   
   if (DEBUG && (fabs(forward_score - backward_score) /
                 max(forward_score, backward_score)) > 1e-10)
@@ -421,21 +520,51 @@ TwoVarHMM::PosteriorDecoding(const vector<pair<double, double> > &meth,
   classes.resize(data_size);
   llr_scores.resize(data_size);
   
+  
+  vector<double> fg_probs(data_size, 0);
+  vector<double> bg_probs(data_size, 0);
+  
+  double mean_hmr_meth = 0, mean_nhmr_meth = 0;
+  size_t n_hmr_cpg = 0, n_nhmr_cpg = 0;
+  
   for (size_t i = 0; i < data_size; ++i) {
     
-    double bscore = forward[0][i] + backward[0][i];
-    double fscore = forward[1][i] + backward[1][i];
-    double total_state_score = log_sum_log(bscore, fscore);
+    const double bscore = forward[0][i] + backward[0][i];
+    const double fscore = forward[1][i] + backward[1][i];
+    const double denom = log_sum_log(bscore, fscore);
+    bg_probs[i] = exp(bscore - denom);
+    fg_probs[i] = exp(fscore - denom);
     
     if (bscore > fscore) {
       classes[i] = 0;
-      llr_scores[i] = exp(bscore - total_state_score);
+      llr_scores[i] = bg_probs[i];
+      if (meth[i].second >= 0) { // covered sites
+        mean_nhmr_meth += meth[i].first/(meth[i].first + meth[i].second);
+        n_nhmr_cpg++;
+      }
     } else {
       classes[i] = 1;
-      llr_scores[i] = exp(fscore - total_state_score);
+      llr_scores[i] = fg_probs[i];
+      if (meth[i].second >= 0) { // covered sites
+        mean_hmr_meth += meth[i].first/(meth[i].first + meth[i].second);
+        n_hmr_cpg++;
+      }
     }
   }
   
+  mean_hmr_meth = mean_hmr_meth / n_hmr_cpg;
+  mean_nhmr_meth = mean_nhmr_meth / n_nhmr_cpg;
+  
+  // do imputation
+  if (IMPUT) {
+    for (size_t i = 0; i < data_size; ++i) {
+      if (meth[i].second < 0) { // not-covered sites
+        meth[i].first = mean_hmr_meth*fg_probs[i] + mean_nhmr_meth*bg_probs[i];
+       // std::cout << mean_hmr_meth << " * " << fg_probs[i] << " + "
+       // << mean_nhmr_meth << " * " << bg_probs[i]  << " = " << meth[i].first << endl;
+      }
+    }
+  }
   return total_score;
 }
 

@@ -1,6 +1,6 @@
 #    Makefile from smithlab_cpp C++ code library
 #
-#    Copyright (C) 2010 University of Southern California and
+#    Copyright (C) 2015-2016 University of Southern California and
 #                       Andrew D. Smith
 #
 #    Authors: Andrew D. Smith

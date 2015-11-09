@@ -32,14 +32,25 @@ using std::pair;
 typedef vector< vector<double> > matrix;
 
 
+
+template <class T> void 
+select_vector_elements(const vector<T> &fullset, vector<T> &subset,
+                       const vector<size_t> &index);
+
+////////////////////////////////////////////////////////////////////////
+
 class TwoVarHMM {
 public:
   
   TwoVarHMM(const double tol, const double minprob, const size_t max_itr,
-            const bool v, bool d = false) :
+            const bool v, const bool e, bool t = false, bool d = false) :
     tolerance(tol), MIN_PROB(minprob), max_iterations(max_itr),
-    VERBOSE(v), DEBUG(d) {}
+    VERBOSE(v), NO_RATE_EST(e), TRAINIMPUT(t), DEBUG(d) {}
   
+  void set_trainimput(const bool t, const vector<size_t> &cov_index) {
+    TRAINIMPUT = t;
+    cov_idx = cov_index;
+  }
   
   void
   set_parameters(const BetaBin _fg_emission, const BetaBin _bg_emission,
@@ -49,22 +60,21 @@ public:
   
   
   double
-  BaumWelchTraining(const vector<pair<double, double> > &meth,
+  BaumWelchTraining(vector<pair<double, double> > &meth,
                     const vector<size_t> &time);
   
 
   double
-  PosteriorDecoding(const vector<pair<double, double> > &meth,
-                    const vector<size_t> &time,
-                    vector<int> &classes, vector<double> &llr_scores);
+  PosteriorDecoding(vector<pair<double, double> > &meth,
+                    const vector<size_t> &time, vector<int> &classes,
+                    vector<double> &llr_scores, bool IMPUT = false);
  
   
 private:
   
   double
-  single_iteration(const vector<pair<double, double> > &meth,
-                   const vector<size_t> &time,
-                   const vector<double> &meth_lp,
+  single_iteration(vector<pair<double, double> > &meth,
+                   const vector<size_t> &time, const vector<double> &meth_lp,
                    const vector<double> &unmeth_lp);
 
   double
@@ -83,7 +93,7 @@ private:
   
   void
   update_trans_estimator(const vector<pair<double, double> > &meth,
-                         const double total, matrix &te,
+                         const double total, matrix &te, matrix &r,
                          const matrix &ltp) const;
   
   void
@@ -91,7 +101,13 @@ private:
   
   
   void
-  estimate_emissions(const vector<double> &meth_lp,
+  update_imputed_methylv(vector<pair<double, double> > &meth,
+                         const vector<double> &fg_probs,
+                         const vector<double> &bg_probs) const;
+  
+  void
+  estimate_emissions(vector<pair<double, double> > &meth,
+                     const vector<double> &meth_lp,
                      const vector<double> &unmeth_lp);
   
   
@@ -122,10 +138,13 @@ private:
   double MIN_PROB;
   size_t max_iterations;
   bool VERBOSE;
-  bool DEBUG;
+  bool NO_RATE_EST;
   
-  // internal data
-  vector<double> lr;
+  // imputation
+  bool TRAINIMPUT;
+  vector<size_t> cov_idx;
+  
+  bool DEBUG;
 };
 
 
