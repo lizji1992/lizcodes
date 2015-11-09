@@ -107,11 +107,20 @@ BetaBin::tostring() const {
 double
 BetaBin::operator()(const pair<double, double> &val) const
 {
-  const size_t x = static_cast<size_t>(val.first);
-  const size_t n = static_cast<size_t>(x + val.second);
-  return gsl_sf_lnchoose(n, x) +
-  gsl_sf_lnbeta(alpha + x, beta + val.second) - lnbeta_helper;
+  double y;
+  if (val.second < 0) { // imputated CpG -- beta distribution
+    const double v_smooth = min(max(val.first, 1e-2), 1.0 - 1e-2);
+    y = (alpha - 1) * log(v_smooth) + (beta - 1) * log(1 - v_smooth)
+        - lnbeta_helper;
+  } else {
+    const size_t x = static_cast<size_t>(val.first);
+    const size_t n = static_cast<size_t>(x + val.second);
+    y = gsl_sf_lnchoose(n, x) + gsl_sf_lnbeta(alpha + x, beta + val.second)
+        - lnbeta_helper;
+  }
+  return y;
 }
+
 
 void
 BetaBin::fit(const vector<double> &vals_a, const vector<double> &vals_b,
@@ -158,20 +167,15 @@ double p_ff(const double t) const { return a+(1-a)*ebt[i]; }
  
 
 void ExpTransEstimator::calc_internal_data(const vector<size_t> &t,
-                                           const double u, const double v,
-                                           vector<double> &log_a,
-                                           vector<double> &log_1_a,
-                                           vector<double> &neg_bt) const {
+                                           const double v,
+                                           vector<double> &ebt) const {
   // store ebt for the computation convenience
   for (size_t i = 0; i < t.size(); ++i) {
-    log_a[i] = log(u);
-    log_1_a[i] = log(1-u);
-    neg_bt[i] = - v * (t[i+1] - t[i]);
+    ebt[i] = exp(- v * (t[i+1] - t[i]));
   }
-  
 }
 
-
+/*
 double ExpTransEstimator::calc_log_llh(const matrix &r,
                                        const vector<double> &log_a,
                                        const vector<double> &log_1_a,
@@ -202,29 +206,54 @@ double ExpTransEstimator::calc_log_llh(const matrix &r,
   }
   return val;
 }
+*/
 
 
-
-double ExpTransEstimator::llh_grad_a(const matrix &lr,
-                                     const vector<double> &neg_bt) const {
+double ExpTransEstimator::calc_llh(const matrix &r, const double u,
+                                   const vector<double> &ebt) const {
+  
   double val = 0;
-  for (size_t i = 0; i < neg_bt.size(); ++i) {
-    val += lr[0][i]*( (-1+exp(neg_bt[i])) / (1-a+a*exp(neg_bt[i])) )
-           + lr[1][i]*( (1) / (a) )
-           + lr[2][i]*( (1) / (1-a) )
-           + lr[3][i]*( (1-exp(neg_bt[i])) / (a+(1-a)*exp(neg_bt[i])) );
+  for (size_t i = 0; i < ebt.size(); ++i) {
+    const double d = r[0][i]*log(1 - u + u * ebt[i])
+                     + r[1][i]*log(u - u * ebt[i])
+                     + r[2][i]*log(1 - u - (1 - u) * ebt[i])
+                     + r[3][i]*log(u + (1 - u) * ebt[i]);
+    
+    val += d;
+    //std::cout << log(1 - u + u * ebt[i]) << " " << log(u - u * ebt[i])
+    //          << " " << log(1 - u - (1 - u) * ebt[i]) << " "
+    //          << log(u + (1 - u) * ebt[i]) << endl;
+    //if ( (1 - u + u * ebt[i]) <= 0 || (u - u * ebt[i]) <= 0 ||
+    //     (1 - u - (1 - u) * ebt[i]) <= 0 || (u + (1 - u) * ebt[i]) <= 0 )
+    //  std::cout << 1 - u + u * ebt[i] << " " << u - u * ebt[i] << " "
+    //            << 1 - u - (1 - u) * ebt[i] << " " << u + (1 - u) * ebt[i]
+    //            << endl;
+    
   }
   return val;
 }
 
 
-double ExpTransEstimator::llh_grad_b(const matrix &lr,
-                                     const vector<double> &neg_bt) const {
+double ExpTransEstimator::llh_grad_a(const matrix &r,
+                                     const vector<double> &ebt) const {
   double val = 0;
-  for (size_t i = 0; i < neg_bt.size(); ++i) {
-    val += lr[0][i]*( (-a*b*exp(neg_bt[i])) / (1-a+a*exp(neg_bt[i])) )
-           + (lr[1][i] + lr[2][i])*( (b*exp(neg_bt[i])) / (1-exp(neg_bt[i])) )
-           + lr[3][i]*( (-(1-a)*exp(b*neg_bt[i])) / (a+(1-a)*exp(neg_bt[i])) );
+  for (size_t i = 0; i < ebt.size(); ++i) {
+    val += r[0][i]*( (-1+ebt[i]) / (1-a+a*ebt[i]) )
+           + r[1][i]*( (1) / (a) )
+           + r[2][i]*( (1) / (1-a) )
+           + r[3][i]*( (1-ebt[i]) / (a+(1-a)*ebt[i]) );
+  }
+  return val;
+}
+
+
+double ExpTransEstimator::llh_grad_b(const matrix &r,
+                                     const vector<double> &ebt) const {
+  double val = 0;
+  for (size_t i = 0; i < ebt.size(); ++i) {
+    val += r[0][i]*( (-a*b*ebt[i]) / (1-a+a*ebt[i]) )
+           + (r[1][i] + r[2][i]) * ( (b*ebt[i]) / (1-ebt[i]) )
+           + r[3][i]*( (-(1-a)*b*ebt[i]) / (a+(1-a)*ebt[i]) );
   }
   return val;
 }
@@ -241,31 +270,42 @@ void ExpTransEstimator::GA_stepforward(const double grad_a,
   double new_a = a + try_step * grad_a;
   double new_b = b + try_step * grad_b;
   
-  vector<double> log_a (t.size(), 0);
-  vector<double> log_1_a (t.size(), 0);
-  vector<double> neg_bt (t.size(), 0);
-  calc_internal_data(t, new_a, new_b, log_a, log_1_a, neg_bt);
-  double moving_llh = calc_log_llh(r, log_a, log_1_a, neg_bt);
+  double moving_llh = - std::numeric_limits<double>::max();
   
-  std::cout << " start !!! " << " a: " << a << " b: "
-            << b << " LLH: " << old_llh << endl;
+  vector<double> ebt (t.size(), 0);
+  if (new_a > 0 && new_a < 1 && new_b > 0) {
+    calc_internal_data(t, new_b, ebt);
+    moving_llh = calc_llh(r, new_a, ebt);
+  }
   
-  std::cout << " searching ... " << " a: " << new_a << " b: "
-            << new_b << " LLH: " << moving_llh << endl;
+  //std::cout << " start !!! " << " a: " << a << " b: "
+  //          << b << " LLH: " << old_llh << endl;
   
-  while (moving_llh <= old_llh && abs(moving_llh - old_llh) > tolerance) {
+ // std::cout << " searching ... " << " a: " << new_a << " b: "
+ //           << new_b << " LLH: " << moving_llh << endl;
+  
+  size_t itr = 1;
+  
+  //cerr << "before iteration" << endl;
+  while (moving_llh <= old_llh && abs(moving_llh - old_llh) > tolerance
+         && itr < max_iteration) {
     try_step = try_step / 2;
     new_a = a + try_step * grad_a;
     new_b = b + try_step * grad_b;
     
-    calc_internal_data(t, new_a, new_b, log_a, log_1_a, neg_bt);
-    moving_llh = calc_log_llh(r, log_a, log_1_a, neg_bt);
-    std::cout << " searching ... " << " a: " << new_a << " b: "
-              << new_b << " LLH: " << moving_llh << endl;
+    if (new_a > 0 && new_a < 1 && new_b > 0) {
+      calc_internal_data(t, new_b, ebt);
+      moving_llh = calc_llh(r, new_a, ebt);
+    }
+
+    //std::cout << " searching ... " << " a: " << new_a << " b: "
+    //          << new_b << " LLH: " << moving_llh << endl;
+    ++itr;
   }
+  //cerr << "after iteration" << endl;
   
-  std::cout << " final !!! " << " a: " << new_a << " b: "
-            << new_b << " LLH: " << moving_llh << endl;
+  //std::cout << " final !!! " << " a: " << new_a << " b: "
+  //          << new_b << " LLH: " << moving_llh << endl;
   if (moving_llh > old_llh && new_a > 0 && new_a < 1 && new_b > 0) {
     a = new_a;
     b = new_b;
@@ -280,36 +320,28 @@ void ExpTransEstimator::GA_stepforward(const double grad_a,
 void ExpTransEstimator::mle_GradAscent(const matrix &r,
                                        const vector<size_t> &t) {
   
-  cerr << "[ENTER MLE GRADASCENT]" << endl;
-  
-  matrix lr;
-  lr.resize(4);
-  for (size_t i = 0; i < 4; ++i) {
-    lr[i].resize(r[i].size());
-    for (size_t j = 0; j < r[i].size(); ++j) {
-      lr[i][j] = exp(r[i][j]);
-    }
-  }
-  
-  vector<double> log_a (t.size(), 0);
-  vector<double> log_1_a (t.size(), 0);
-  vector<double> neg_bt (t.size(), 0);
-  calc_internal_data(t, a, b, log_a, log_1_a, neg_bt);
-  double curr_llh = calc_log_llh(r, log_a, log_1_a, neg_bt);
+  //cerr << "[ENTER MLE GRADASCENT]" << endl;
+
+  vector<double> ebt (t.size(), 0);
+  calc_internal_data(t, b, ebt);
+  double curr_llh = calc_llh(r, a, ebt);
   
   double grad_a, grad_b;
-  grad_a = llh_grad_a(lr, neg_bt);
-  grad_b = llh_grad_b(lr, neg_bt);
+  grad_a = llh_grad_a(r, ebt);
+  grad_b = llh_grad_b(r, ebt);
   
   double new_llh;
   GA_stepforward(grad_a, grad_b, curr_llh, new_llh, r, t);
   
-  while (abs(new_llh - curr_llh) > tolerance) {
+  size_t itr = 1;
+  
+  while (abs(new_llh - curr_llh) > tolerance && itr < max_iteration) {
     curr_llh = new_llh;
-    calc_internal_data(t, a, b, log_a, log_1_a, neg_bt);
-    grad_a = llh_grad_a(lr, neg_bt);
-    grad_b = llh_grad_b(lr, neg_bt);
-     GA_stepforward(grad_a, grad_b, curr_llh, new_llh, r, t);
+    calc_internal_data(t, b, ebt);
+    grad_a = llh_grad_a(r, ebt);
+    grad_b = llh_grad_b(r, ebt);
+    GA_stepforward(grad_a, grad_b, curr_llh, new_llh, r, t);
+    ++itr;
   }
 }
 

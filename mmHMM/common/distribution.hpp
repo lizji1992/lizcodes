@@ -24,11 +24,15 @@ typedef vector< vector<double> > matrix;
 // struct BetaBin;
 struct BetaBin
 {
-  BetaBin() : alpha(1), beta(1), lnbeta_helper(gsl_sf_lnbeta(1, 1)) {}
+  BetaBin() : alpha(1), beta(1), lnbeta_helper(gsl_sf_lnbeta(1, 1)),
+              tolerance(1e-10) {}
   BetaBin(const double a, const double b) :
-  alpha(a), beta(b), lnbeta_helper(gsl_sf_lnbeta(a, b)) {}
+  alpha(a), beta(b), lnbeta_helper(gsl_sf_lnbeta(a, b)), tolerance(1e-10) {}
+  BetaBin(const double a, const double b, const double t) :
+  alpha(a), beta(b), lnbeta_helper(gsl_sf_lnbeta(a, b)), tolerance(t) {}
   
   double operator()(const std::pair<double, double> &val) const;
+  
   void fit(const std::vector<double> &vals_a,
            const std::vector<double> &vals_b,
            const std::vector<double> &p);
@@ -37,7 +41,7 @@ struct BetaBin
   double alpha;
   double beta;
   double lnbeta_helper;
-  static const double tolerance = 1e-10;
+  double tolerance;
 };
 
 
@@ -67,13 +71,13 @@ class ExpTransEstimator {
 public:
   
   ExpTransEstimator() : a(0.02), b(0.002),
-                        step_size(0.01), tolerance(1e-10) {}
+                        step_size(0.01), tolerance(1e-10), max_iteration(20) {}
   ExpTransEstimator(const double _a,
                     const double _b) : a(_a), b(_b),
-                                       step_size(0.01), tolerance(1e-10) {}
+                   step_size(0.01), tolerance(1e-10), max_iteration(20) {}
   ExpTransEstimator(const double _a, const double _b, const double s,
-                    const double t) : a(_a), b(_b),
-                                      step_size(s), tolerance(t) {}
+                    const double t, const size_t m) : a(_a), b(_b),
+                    step_size(s), tolerance(t), max_iteration(m) {}
   
   void set_stepsize(const double s) {step_size = s;}
   void set_tolerance(const double t) {tolerance = t;}
@@ -90,22 +94,20 @@ public:
 
 private:
   
-  void calc_internal_data(const vector<size_t> &t, const double u,
-                          const double v, vector<double> &log_a,
-                          vector<double> &log_1_a,
-                          vector<double> &neg_bt) const;
-  double calc_log_llh(const matrix &r, const vector<double> &log_a,
-                      const vector<double> &log_1_a,
-                      const vector<double> &neg_bt) const;
+  void calc_internal_data(const vector<size_t> &t, const double v,
+                          vector<double> &ebt) const;
+  double calc_llh(const matrix &r, const double u,
+                  const vector<double> &ebt) const;
   
-  double llh_grad_a(const matrix &lr, const vector<double> &neg_bt) const;
-  double llh_grad_b(const matrix &lr, const vector<double> &neg_bt) const;
+  double llh_grad_a(const matrix &r, const vector<double> &ebt) const;
+  double llh_grad_b(const matrix &r, const vector<double> &ebt) const;
 
   
   //  parameters
   double a, b;
   double step_size;
   double tolerance;
+  size_t max_iteration;
   
 };
 
