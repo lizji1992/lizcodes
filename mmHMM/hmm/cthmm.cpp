@@ -120,9 +120,9 @@ rm_missingdata(const bool VERBOSE, vector<SimpleGenomicRegion> &cpgs,
 
 
 template <class T, class U> static void
-smooth_methylv(const bool VERBOSE, const vector<U> &reads, vector<T> &meth,
-               const vector<size_t> mytime, vector<size_t> &cov_idx,
-               vector<size_t> &miss_idx) {
+mark_missing_cpg(const bool VERBOSE, const vector<U> &reads, vector<T> &meth,
+                 const vector<size_t> mytime, vector<size_t> &cov_idx,
+                 vector<size_t> &miss_idx) {
   if (VERBOSE)
     cerr << "[SMOOTH ZERO READ CPGS]" << endl;
   
@@ -135,8 +135,8 @@ smooth_methylv(const bool VERBOSE, const vector<U> &reads, vector<T> &meth,
       cov_r = i + 1;
     } else {
       miss_idx.push_back(i);
-      meth[i].first = 0.5;
-      meth[i].second = -1;
+      meth[i].first = 0;
+      meth[i].second = -2;
     }
   }
 
@@ -355,7 +355,7 @@ main(int argc, const char **argv) {
       rm_missingdata(VERBOSE, cpgs, meth, reads, time);
     }
     else {
-      smooth_methylv(VERBOSE, reads, meth, time, cov_idx, miss_idx);
+      mark_missing_cpg(VERBOSE, reads, meth, time, cov_idx, miss_idx);
     }
     
     // set-up distributions
@@ -439,7 +439,6 @@ main(int argc, const char **argv) {
     vector<double> p_values;
     assign_p_values(random_scores, domain_scores, p_values);
     
-    //double fdr_cutoff = std::numeric_limits<double>::max();
     double fdr_cutoff = numeric_limits<double>::max();
     if (fdr_cutoff == numeric_limits<double>::max())
       fdr_cutoff = get_fdr_cutoff(p_values, 0.01);
