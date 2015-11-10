@@ -133,8 +133,6 @@ TwoVarHMM::forward_algorithm(const vector<pair<double, double> > &meth,
     
     const double ff = a + (1 - a) * exp(-(b * dist));
     const double bb = 1 - a + a * exp(-(b * dist));
-    //std::cout << a << "; " << b << "; " << dist << endl;
-    //std::cout << bb << ", " << 1 - bb << ", " << 1 - ff << ", " << ff << endl;
     
     const double lp_ff = log(ff);
     const double lp_fb = log(1 - ff);
@@ -151,7 +149,6 @@ TwoVarHMM::forward_algorithm(const vector<pair<double, double> > &meth,
     // foreground
     forward[1][i] = (fg_emission(meth[i]) +
                      log_sum_log(forward[0][k] + lp_bf, forward[1][k] + lp_ff));
-    //std::cout << meth[i].first << " , " << meth[i].second << endl;
 
   }
   
@@ -167,9 +164,6 @@ TwoVarHMM::backward_algorithm(const vector<pair<double, double> > &meth,
                               const double lp_sf, const double lp_sb,
                               const double lp_ft, const double lp_bt,
                               const matrix &ltp) {
-  
-  //cerr << "ENTER BACKWARD COMPUTATION" << endl;
-
   
   const size_t end = backward[0].size();
   
@@ -204,8 +198,6 @@ TwoVarHMM::update_trans_estimator(const vector<pair<double, double> > &meth,
                                   const double total, matrix &te,
                                   matrix &r, const matrix &ltp) const {
   
-  //cerr << "ENTER TRANST ESTIMATRO UPDATION" << endl;
-
   for (size_t i = 0; i < te[0].size() - 1; ++i) {
     const size_t j = i + 1;
     te[0][i] = forward[0][i] + ltp[0][i] + bg_emission(meth[j])
@@ -229,9 +221,7 @@ TwoVarHMM::update_trans_estimator(const vector<pair<double, double> > &meth,
     r[1][i] = exp(te[1][i] - denom);
     r[2][i] = exp(te[2][i] - denom);
     r[3][i] = exp(te[3][i] - denom);
-    
-   // std::cout << te[0][i] << " " << te[1][i]
-   //           << " " << te[2][i] << " " << te[3][i] << endl;
+
    }
 }
 
@@ -482,8 +472,6 @@ TwoVarHMM::PosteriorDecoding(vector<pair<double, double> > &meth,
                              vector<int> &classes, vector<double> &llr_scores,
                              bool IMPUT){
   
-  //cerr << "ENTER POSTERIOR DECODING" << endl;
-  
   size_t data_size = meth.size();
   forward.resize(2);
   backward.resize(2);
@@ -507,7 +495,6 @@ TwoVarHMM::PosteriorDecoding(vector<pair<double, double> > &meth,
   
   const double backward_score =
       backward_algorithm(meth, time, lp_sf, lp_sb, lp_ft, lp_bt, ltp);
-  //cerr << "FINISH BACKWARD COMPUTATION" << endl;
 
   
   if (DEBUG && (fabs(forward_score - backward_score) /
@@ -560,8 +547,6 @@ TwoVarHMM::PosteriorDecoding(vector<pair<double, double> > &meth,
     for (size_t i = 0; i < data_size; ++i) {
       if (meth[i].second < 0) { // not-covered sites
         meth[i].first = mean_hmr_meth*fg_probs[i] + mean_nhmr_meth*bg_probs[i];
-       // std::cout << mean_hmr_meth << " * " << fg_probs[i] << " + "
-       // << mean_nhmr_meth << " * " << bg_probs[i]  << " = " << meth[i].first << endl;
       }
     }
   }
