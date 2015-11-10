@@ -108,10 +108,12 @@ double
 BetaBin::operator()(const pair<double, double> &val) const
 {
   double y;
-  if (val.second < 0) { // imputated CpG -- beta distribution
+  if (val.second == -1) { // imputated CpG -- beta distribution
     const double v_smooth = min(max(val.first, 1e-2), 1.0 - 1e-2);
     y = (alpha - 1) * log(v_smooth) + (beta - 1) * log(1 - v_smooth)
         - lnbeta_helper;
+  } else if (val.second == -2) {
+    y = 1;
   } else {
     const size_t x = static_cast<size_t>(val.first);
     const size_t n = static_cast<size_t>(x + val.second);
