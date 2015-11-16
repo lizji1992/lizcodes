@@ -1,10 +1,23 @@
-//
-//  distribution.h
-//  
-//
-//  Created by Liz Ji on 6/24/15.
-//
-//
+/*
+  Copyright (C) 2015-2018 University of Southern California
+  Authors: Xiaojing Ji and Andrew D. Smith
+
+  This file is part of methpipe.
+
+  methpipe is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2 of the License, or
+  (at your option) any later version.
+
+  methpipe is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with methpipe; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+*/
 
 #ifndef DISTRIBUTION_HPP
 #define DISTRIBUTION_HPP
@@ -51,10 +64,6 @@ struct NegBin
   NegBin(const size_t a, const double b) : r(a), p(b) {set_helpers();}
   
   void set_helpers();
-  
-  //static const double max_allowed_alpha = 100;
-  //static const double min_allowed_alpha = 1e-20;
-  //static const double alpha_allowed_error = 1e-10;
   
   size_t r; // num of failure
   double p; // prob of failure
@@ -121,29 +130,4 @@ log_sum_log(const double p, const double q);
 inline double
 log_sub_log(const double p, const double q);
 
-/*
-class NegBinomDistro : public Distro_ {
-public:
-  
-  NegBinomDistro() : Distro_(std::vector<double>(2, 0)) {}
-  NegBinomDistro(std::vector<double> p) : Distro_(p) {set_helpers();}
-  NegBinomDistro(const NegBinomDistro &rhs);
-  NegBinomDistro& operator=(const NegBinomDistro &rhs);
-  ~NegBinomDistro() {}
-  void set_helpers();
-  double sample() const;
-  size_t required_params() const {return 2;}
-  void set_params(const std::vector<double> &p);
-  void estimate_params_ml(const std::vector<double> &vals);
-  void estimate_params_ml(const std::vector<double> &vals,
-                          const std::vector<double> &probs);
-  void estimate_params_ml(const std::vector<double> &vals,
-                          const std::vector<double> &scales,
-                          const std::vector<double> &probs);
-  
-  double log_likelihood(double val) const;
-  double log_likelihood(const double &val, const double &scale) const;
-
-};
-*/
 #endif
