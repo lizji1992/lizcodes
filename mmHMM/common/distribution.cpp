@@ -1,8 +1,6 @@
 /*
  Copyright (C) 2015-2016 University of Southern California
- Authors: Andrew D. Smith, Song Qiang
- 
- This file is part of rmap.
+ Authors: Andrew D. Smith, Xiaojing Ji
  
  rmap is free software; you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -76,7 +74,6 @@ sign(double x) {
   return (x >= 0) ? 1.0 : -1.0;
 }
 
-//static const double tolerance = 1e-10;
 
 inline static double
 invpsi(const double tolerance, const double x) {
@@ -160,13 +157,6 @@ NegBin::set_helpers() {
 //////       struct CTHMM duration      //////
 //////////////////////////////////////////////
 
-/*
-double p_bb(const double t) const { return ; }
-double p_bf(const double t) const { return a-a*ebt[i]; }
-double p_fb(const double t) const { return 1-a-(1-a)*ebt[i]; }
-double p_ff(const double t) const { return a+(1-a)*ebt[i]; }
-*/
- 
 
 void ExpTransEstimator::calc_internal_data(const vector<size_t> &t,
                                            const double v,
@@ -177,38 +167,6 @@ void ExpTransEstimator::calc_internal_data(const vector<size_t> &t,
   }
 }
 
-/*
-double ExpTransEstimator::calc_log_llh(const matrix &r,
-                                       const vector<double> &log_a,
-                                       const vector<double> &log_1_a,
-                                       const vector<double> &neg_bt) const {
-  
-  double lp_bb = log_sum_log(log_1_a[0], log_a[0] + neg_bt[0]);
-  double lp_bf = log_sub_log(log_a[0], log_a[0] + neg_bt[0]);
-  double lp_fb = log_sub_log(log_1_a[0], log_1_a[0] + neg_bt[0]);
-  double lp_ff = log_sum_log(log_a[0], log_1_a[0] + neg_bt[0]);
-  
-  
-  double val = r[0][0] + log(lp_bb);
-  val = log_sum_log(val, r[1][0] + log(lp_bf));
-  val = log_sum_log(val, r[2][0] + log(lp_fb));
-  val = log_sum_log(val, r[3][0] + log(lp_ff));
-  
-  
-  for (size_t i=0; i < neg_bt.size(); ++i) {
-    lp_bb = log_sum_log(log_1_a[i], log_a[i] + neg_bt[i]);
-    lp_bf = log_sub_log(log_a[i], log_a[i] + neg_bt[i]);
-    lp_fb = log_sub_log(log_1_a[i], log_1_a[i] + neg_bt[i]);
-    lp_ff = log_sum_log(log_a[i], log_1_a[i] + neg_bt[i]);
-    
-    val = log_sum_log(val, r[0][i] + log(lp_bb));
-    val = log_sum_log(val, r[1][i] + log(lp_bf));
-    val = log_sum_log(val, r[2][i] + log(lp_fb));
-    val = log_sum_log(val, r[3][i] + log(lp_ff));
-  }
-  return val;
-}
-*/
 
 
 double ExpTransEstimator::calc_llh(const matrix &r, const double u,
@@ -222,15 +180,6 @@ double ExpTransEstimator::calc_llh(const matrix &r, const double u,
                      + r[3][i]*log(u + (1 - u) * ebt[i]);
     
     val += d;
-    //std::cout << log(1 - u + u * ebt[i]) << " " << log(u - u * ebt[i])
-    //          << " " << log(1 - u - (1 - u) * ebt[i]) << " "
-    //          << log(u + (1 - u) * ebt[i]) << endl;
-    //if ( (1 - u + u * ebt[i]) <= 0 || (u - u * ebt[i]) <= 0 ||
-    //     (1 - u - (1 - u) * ebt[i]) <= 0 || (u + (1 - u) * ebt[i]) <= 0 )
-    //  std::cout << 1 - u + u * ebt[i] << " " << u - u * ebt[i] << " "
-    //            << 1 - u - (1 - u) * ebt[i] << " " << u + (1 - u) * ebt[i]
-    //            << endl;
-    
   }
   return val;
 }
@@ -280,15 +229,8 @@ void ExpTransEstimator::GA_stepforward(const double grad_a,
     moving_llh = calc_llh(r, new_a, ebt);
   }
   
-  //std::cout << " start !!! " << " a: " << a << " b: "
-  //          << b << " LLH: " << old_llh << endl;
-  
- // std::cout << " searching ... " << " a: " << new_a << " b: "
- //           << new_b << " LLH: " << moving_llh << endl;
-  
   size_t itr = 1;
   
-  //cerr << "before iteration" << endl;
   while (moving_llh <= old_llh && abs(moving_llh - old_llh) > tolerance
          && itr < max_iteration) {
     try_step = try_step / 2;
@@ -299,15 +241,10 @@ void ExpTransEstimator::GA_stepforward(const double grad_a,
       calc_internal_data(t, new_b, ebt);
       moving_llh = calc_llh(r, new_a, ebt);
     }
-
-    //std::cout << " searching ... " << " a: " << new_a << " b: "
-    //          << new_b << " LLH: " << moving_llh << endl;
+    
     ++itr;
   }
-  //cerr << "after iteration" << endl;
-  
-  //std::cout << " final !!! " << " a: " << new_a << " b: "
-  //          << new_b << " LLH: " << moving_llh << endl;
+
   if (moving_llh > old_llh && new_a > 0 && new_a < 1 && new_b > 0) {
     a = new_a;
     b = new_b;
@@ -322,8 +259,6 @@ void ExpTransEstimator::GA_stepforward(const double grad_a,
 void ExpTransEstimator::mle_GradAscent(const matrix &r,
                                        const vector<size_t> &t) {
   
-  //cerr << "[ENTER MLE GRADASCENT]" << endl;
-
   vector<double> ebt (t.size(), 0);
   calc_internal_data(t, b, ebt);
   double curr_llh = calc_llh(r, a, ebt);
