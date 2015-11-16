@@ -1,9 +1,10 @@
 /*
- *  Continuous-time Variable-duration HMM
+ * Continuous-time HMM
  *
  * Copyright (C) 2015-2016 University of Southern California
  *                         Andrew D Smith
- * Author: Andrew D. Smith, Song Qiang
+ *
+ * Author: Andrew D. Smith, Xiaojing Ji
  *
  * This is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
@@ -149,7 +150,6 @@ static void
 get_domain_scores(const vector<int> &classes,
                   const vector<pair<double, double> > &meth,
                   vector<double> &scores) {
-  //cerr << "GET DOMAIN SCORES" << endl;
   static const int CLASS_ID = 1;
   size_t n_cpgs = 0;
   bool in_domain = false;
@@ -191,7 +191,6 @@ static void
 assign_p_values(const vector<double> &random_scores,
                 const vector<double> &observed_scores,
                 vector<double> &p_values) {
-  //cerr << "ASSIGN P VALUES" << endl;
   const size_t n_random_scores = random_scores.size();
   const double n_randoms = n_random_scores == 0 ? 1 : n_random_scores;
   
@@ -235,8 +234,7 @@ build_domains(const bool VERBOSE,
               const vector<double> &post_scores,
               const vector<int> &classes,
               vector<GenomicRegion> &domains) {
-  //cerr << "ENTER BUILD DOMAINS  ";
-  //cerr << std::accumulate(classes.begin(), classes.end(), 0) << endl;
+  
   static const int CLASS_ID = 1;
   size_t n_cpgs = 0, n_domains = 0, prev_end = 0;
   bool in_domain = false;
@@ -285,7 +283,6 @@ main(int argc, const char **argv) {
     double fg_rate = 0.002;
     double bg_rate = 0.02;
     
-    string params_in_file, params_out_file;
     string outfile, scores_file, imput_file;
     
     /****************** COMMAND LINE OPTIONS ********************/
@@ -303,10 +300,6 @@ main(int argc, const char **argv) {
                       false, TRAINIMPUT);
     opt_parse.add_opt("verbose", 'v', "print more run info", false, VERBOSE);
     opt_parse.add_opt("no_fdr_control", 'f', "fdr_control", false, NOFDR);
-    //opt_parse.add_opt("params-in", 'P', "HMM parameters file (no training)",
-    //                  false, params_in_file);
-    //opt_parse.add_opt("params-out", 'p', "write HMM parameters to this file",
-    //                  false, params_out_file);
     opt_parse.add_opt("fgrate", 'F', "fg rate", false, fg_rate);
     opt_parse.add_opt("bgrate", 'B', "bg rate", false, bg_rate);
     opt_parse.add_opt("no_rate_est", 'r', "no rate estimation",
@@ -385,7 +378,6 @@ main(int argc, const char **argv) {
       
     double p_ft = 1e-10;
     double p_bt = 1e-10;
-
    
     // HMM initialization
     TwoVarHMM hmm(tolerance, min_prob, max_iterations, VERBOSE, NO_RATE_EST);
@@ -408,15 +400,6 @@ main(int argc, const char **argv) {
       hmm.BaumWelchTraining(meth, time);
     }
     
-    
-/*
-    
-    if (!params_out_file.empty()) {
-      // WRITE ALL THE HMM PARAMETERS:
-      write_params_file(params_out_file, hmm);
-    }
- */
- 
     /***********************************
      * STEP 5: DECODE THE DOMAINS
      */

@@ -1,21 +1,19 @@
 /*
-  Copyright (C) 2015-2016 Cold Spring Harbor Laboratory
-  Authors: Andrew D. Smith
+  Copyright (C) 2015-2016 University of Southern California
+  Authors: Andrew D. Smith and Xiaojing Ji
 
-  This file is part of methpipe.
-
-  methpipe is free software; you can redistribute it and/or modify
+  This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation; either version 2 of the License, or
   (at your option) any later version.
 
-  methpipe is distributed in the hope that it will be useful,
+  This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with methpipe; if not, write to the Free Software
+  along with this program; if not, write to the Free Software
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
@@ -30,7 +28,6 @@
 #include <gsl/gsl_sf_psi.h>
 #include <gsl/gsl_sf_gamma.h>
 
-// #pragma omp <rest of pragma>
 
 using std::vector;
 using std::pair;
@@ -119,7 +116,6 @@ TwoVarHMM::forward_algorithm(const vector<pair<double, double> > &meth,
                              const double lp_sf, const double lp_sb,
                              const double lp_ft, const double lp_bt,
                              matrix &ltp) {
-  //cerr << "ENTER FORWARD COMPUTATION" << endl;
   
   const size_t end = forward[0].size();
   
@@ -256,13 +252,10 @@ void
 TwoVarHMM::update_imputed_methylv(vector<pair<double, double> > &meth,
                                   const vector<double> &fg_probs,
                                   const vector<double> &bg_probs) const {
-  //cerr << "here" << endl;
   for (size_t i = 0; i < fg_probs.size(); ++i) {
     if (meth[i].second < 0) {
       meth[i].first = (bg_probs[i] * meth[i].first) /
       (bg_probs[i] * meth[i].first + fg_probs[i] * (1 - meth[i].first));
-      //std::cout << bg_probs[i] << ", " << fg_probs[i] << ", "
-      //          << meth[i].first << endl;
     }
   }
 }
@@ -300,9 +293,7 @@ TwoVarHMM::estimate_emissions(vector<pair<double, double> > &meth,
     
     update_imputed_methylv(meth, fg_probs, bg_probs);
   }
-  else {  // NO IMPUTATED DATA POINTS
-    //cerr << "ENTER EMISSION FITTING: " << meth_lp.size()
-    //<< " " << unmeth_lp.size() << " " << fg_probs[0] << endl;
+  else {  // DONT TRAIN IMPUTATED DATA POINTS
     fg_emission.fit(meth_lp, unmeth_lp, fg_probs);
     bg_emission.fit(meth_lp, unmeth_lp, bg_probs);
   }
@@ -322,7 +313,6 @@ TwoVarHMM::single_iteration(vector<pair<double, double> > &meth,
   const double lp_ft = log(p_ft);
   const double lp_bt = log(p_bt);
   
-  //cerr << "ENTER NEW ITERATION" << endl;
   // forward/backward algorithm
   const double forward_score =
       forward_algorithm(meth, time, lp_sf, lp_sb, lp_ft, lp_bt, ltp);
@@ -344,7 +334,6 @@ TwoVarHMM::single_iteration(vector<pair<double, double> > &meth,
   
   
   // update transition parameters
-  
   matrix te(4, vector<double> (meth.size(), 0));
   matrix r(4, vector<double> (meth.size(), 0));
   update_trans_estimator(meth, forward_score, te, r, ltp);
@@ -395,10 +384,8 @@ TwoVarHMM::BaumWelchTraining(vector<pair<double, double> > &meth,
       unmeth_lp[i] =
       log(1 - min(max(meth[i].first/(meth[i].first + meth[i].second), 1e-2),
                   1.0 - 1e-2));
-    
     }
   }
-
   
   size_t data_size = meth.size();
   forward.resize(2);
@@ -412,7 +399,6 @@ TwoVarHMM::BaumWelchTraining(vector<pair<double, double> > &meth,
   for (int i = 0; i < 4; ++i) {
     ltp[i].resize(data_size - 1, 0);
   }
-  
   
   if (VERBOSE)
     cerr << setw(5)  << "ITR"
