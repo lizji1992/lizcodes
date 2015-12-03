@@ -30,8 +30,7 @@ INCLUDEARGS = $(addprefix -I,$(INCLUDEDIRS))
 INCLUDEARGS += -I/usr/local/include
 LIBS = -L/usr/local/lib -lgsl -lgslcblas
 
-#PROGS = vdhmr vdhmr_bf NBhmr_sim collapse_segs estimate_exp
-PROGS = cthmm
+PROGS = CTHMM_sim cthmm
 
 CXX = g++
 CFLAGS = -Wall -fPIC -fmessage-length=50
@@ -63,6 +62,7 @@ all: $(PROGS)
 $(PROGS): $(addprefix $(SMITHLAB_CPP)/, \
 	smithlab_os.o smithlab_utils.o GenomicRegion.o OptionParser.o)
 
+CTHMM_sim: $(addprefix $(SMITHLAB_CPP)/, RNG.o)
 cthmm: $(addprefix $(COMMON_DIR)/, 2DCTHMM.o distribution.o)
 
 #vdhmr: $(addprefix $(COMMON_DIR)/, NBVDHMM.o distribution.o)
