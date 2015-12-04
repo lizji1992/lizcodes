@@ -125,10 +125,9 @@ TwoVarHMM::forward_algorithm(const vector<pair<double, double> > &meth,
   for (size_t i = 1; i < end; ++i) {
 
     const size_t k = i - 1;
-    const size_t dist = time[i] - time[k];
     
-    const double ff = a + (1 - a) * exp(-(b * dist));
-    const double bb = 1 - a + a * exp(-(b * dist));
+    const double ff = a + (1 - a) * exp(-(b * time[k]));
+    const double bb = 1 - a + a * exp(-(b * time[k]));
     
     const double lp_ff = log(ff);
     const double lp_fb = log(1 - ff);

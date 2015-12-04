@@ -163,7 +163,7 @@ void ExpTransEstimator::calc_internal_data(const vector<size_t> &t,
                                            vector<double> &ebt) const {
   // store ebt for the computation convenience
   for (size_t i = 0; i < t.size(); ++i) {
-    ebt[i] = exp(- v * (t[i+1] - t[i]));
+    ebt[i] = exp(- v * t[i]);
   }
 }
 
