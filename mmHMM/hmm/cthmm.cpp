@@ -59,8 +59,7 @@ select_vector_elements(const vector<T> &fullset, vector<T> &subset,
 
 static void
 load_cpgs(const string &cpgs_file, vector<SimpleGenomicRegion> &cpgs,
-          vector<pair<double, double> > &meth, vector<size_t> &reads,
-          vector<size_t> &time)
+          vector<pair<double, double> > &meth, vector<size_t> &reads)
 {
 
   string chrom, prev_chrom;
@@ -70,6 +69,7 @@ load_cpgs(const string &cpgs_file, vector<SimpleGenomicRegion> &cpgs,
   size_t coverage;
   
   std::ifstream in(cpgs_file.c_str());
+  
   while (in >> chrom >> pos >> strand >> seq >> level >> coverage) {
     // sanity check
     if (chrom.empty() || strand.empty() || seq.empty()
@@ -92,13 +92,12 @@ load_cpgs(const string &cpgs_file, vector<SimpleGenomicRegion> &cpgs,
     meth.push_back(std::make_pair(0.0, 0.0));
     meth.back().first = static_cast<size_t>(round(level * coverage));
     meth.back().second = static_cast<size_t>(coverage  - meth.back().first);
-    time.push_back(cpgs.back().get_start());
   }
 }
 
 template <class T, class U> static void
 rm_missingdata(const bool VERBOSE, vector<SimpleGenomicRegion> &cpgs,
-               vector<T> &meth, vector<U> &reads, vector<size_t> &mytime) {
+               vector<T> &meth, vector<U> &reads) {
   if (VERBOSE)
     cerr << "[REMOVE ZERO READ CPGS]" << endl;
   size_t j = 0;
@@ -107,13 +106,11 @@ rm_missingdata(const bool VERBOSE, vector<SimpleGenomicRegion> &cpgs,
       cpgs[j] = cpgs[i];
       meth[j] = meth[i];
       reads[j] = reads[i];
-      mytime[j] = mytime[i];
       ++j;
     }
   cpgs.erase(cpgs.begin() + j, cpgs.end());
   meth.erase(meth.begin() + j, meth.end());
   reads.erase(reads.begin() + j, reads.end());
-  mytime.erase(mytime.begin() + j, mytime.end());
   
   if (VERBOSE)
     cerr << "CPGS RETAINED: " << cpgs.size() << endl << endl;
@@ -122,8 +119,7 @@ rm_missingdata(const bool VERBOSE, vector<SimpleGenomicRegion> &cpgs,
 
 template <class T, class U> static void
 mark_missing_cpg(const bool VERBOSE, const vector<U> &reads, vector<T> &meth,
-                 const vector<size_t> mytime, vector<size_t> &cov_idx,
-                 vector<size_t> &miss_idx) {
+                 vector<size_t> &cov_idx) {
   if (VERBOSE)
     cerr << "[SMOOTH ZERO READ CPGS]" << endl;
   
@@ -135,7 +131,6 @@ mark_missing_cpg(const bool VERBOSE, const vector<U> &reads, vector<T> &meth,
       cov_idx.push_back(i);
       cov_r = i + 1;
     } else {
-      miss_idx.push_back(i);
       meth[i].first = 0;
       meth[i].second = -2;
     }
@@ -143,6 +138,33 @@ mark_missing_cpg(const bool VERBOSE, const vector<U> &reads, vector<T> &meth,
 
   if (VERBOSE)
     cerr << "CPGS COVERED: " << cov_idx.size() << endl << endl;
+}
+
+
+static void
+time_between_cpg(const vector<SimpleGenomicRegion> &cpgs,
+                 vector<size_t> &time, const vector<size_t> &idx) {
+  SimpleGenomicRegion a = cpgs[idx[0]];
+  for (size_t i = 1; i < idx.size(); ++i) {
+    SimpleGenomicRegion b = cpgs[idx[i]];
+    const size_t dist = a.same_chrom(b) ?
+    b.get_start() - a.get_start() : numeric_limits<size_t>::max();
+    time.push_back(dist);
+    a = b;
+  }
+}
+
+static void
+time_between_cpg(const vector<SimpleGenomicRegion> &cpgs,
+                 vector<size_t> &time) {
+  SimpleGenomicRegion a = cpgs[0];
+  for (size_t i = 1; i < cpgs.size(); ++i) {
+    SimpleGenomicRegion b = cpgs[i];
+    const size_t dist = a.same_chrom(b) ?
+    b.get_start() - a.get_start() : numeric_limits<size_t>::max();
+    time.push_back(dist);
+    a = b;
+  }
 }
 
 
@@ -326,16 +348,17 @@ main(int argc, const char **argv) {
       return EXIT_SUCCESS;
     }
     const string cpgs_file = leftover_args.front();
+    
     /****************** END COMMAND LINE OPTIONS *****************/
+    
     
     // separate the regions by chrom and by desert
     vector<SimpleGenomicRegion> cpgs;
     vector< pair<double, double> > meth;
-    vector<size_t> time;
     vector<size_t> reads;
     if (VERBOSE)
       cerr << "[READING CPGS AND METH PROPS]" << endl;
-    load_cpgs(cpgs_file, cpgs, meth, reads, time);
+    load_cpgs(cpgs_file, cpgs, meth, reads);
     if (VERBOSE)
       cerr << "TOTAL CPGS: " << cpgs.size() << endl
       << "MEAN COVERAGE: "
@@ -343,12 +366,12 @@ main(int argc, const char **argv) {
       << endl << endl;
     
     vector<size_t> cov_idx;
-    vector<size_t> miss_idx;
+
     if (!IMPUT) {
-      rm_missingdata(VERBOSE, cpgs, meth, reads, time);
+      rm_missingdata(VERBOSE, cpgs, meth, reads); // only covered cpgs
     }
     else {
-      mark_missing_cpg(VERBOSE, reads, meth, time, cov_idx, miss_idx);
+      mark_missing_cpg(VERBOSE, reads, meth, cov_idx); // all cpgs
     }
     
     // set-up distributions
@@ -389,13 +412,16 @@ main(int argc, const char **argv) {
                        p_sf, p_sb, p_ft, p_bt);
     
     vector< pair<double, double> > cmeth;
+    vector<size_t> time;
     vector<size_t> ctime;
     
+    time_between_cpg(cpgs, time);
+    
     // HMM training
-    if (IMPUT && !TRAINIMPUT) {
-        select_vector_elements(meth, cmeth, cov_idx);
-        select_vector_elements(time, ctime, cov_idx);
-        hmm.BaumWelchTraining(cmeth, ctime);
+    if (IMPUT && !TRAINIMPUT) { // select covered cpgs from all cpgs
+      select_vector_elements(meth, cmeth, cov_idx);
+      time_between_cpg(cpgs, ctime, cov_idx);
+      hmm.BaumWelchTraining(cmeth, ctime);
     } else {
       hmm.BaumWelchTraining(meth, time);
     }
