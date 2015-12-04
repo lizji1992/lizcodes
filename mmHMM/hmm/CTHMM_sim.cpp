@@ -282,14 +282,14 @@ main(int argc, const char **argv)
     /****************** END COMMAND LINE OPTIONS *****************/
     
     if (VERBOSE)
-      cerr << "READCOV N : " << readdepth_distro_n << endl
-      << "READCOV P : " << readdepth_distro_p << endl
-      << "F RATE : " << fg_rate << endl
-      << "B RATE : " << bg_rate << endl
-      << "F ALPHA : " << fg_alpha << endl
-      << "F BETA : " << fg_beta << endl
-      << "B ALPHA : " << bg_alpha << endl
-      << "B BETA : " << bg_beta << endl;
+      cerr << "READCOV_N" << readdepth_distro_n << endl
+      << "READCOV_P" << readdepth_distro_p << endl
+      << "F_RATE : " << fg_rate << endl
+      << "B_RATE : " << bg_rate << endl
+      << "F_ALPHA : " << fg_alpha << endl
+      << "F_BETA : " << fg_beta << endl
+      << "B_ALPHA : " << bg_alpha << endl
+      << "B_BETA : " << bg_beta << endl;
     
     Runif rng(time(NULL));
     const gsl_rng_type * T;
