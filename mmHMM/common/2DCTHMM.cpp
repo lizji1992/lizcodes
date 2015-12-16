@@ -277,25 +277,8 @@ TwoVarHMM::estimate_emissions(vector<pair<double, double> > &meth,
     fg_probs[i] = exp(fg - denom);
   }
   
-  if (TRAINIMPUT) {
-    vector<double> cmeth_lp;
-    vector<double> cunmeth_lp;
-    vector<double> cfg_probs;
-    vector<double> cbg_probs;
-    select_vector_elements(meth_lp, cmeth_lp, cov_idx);
-    select_vector_elements(unmeth_lp, cunmeth_lp, cov_idx);
-    select_vector_elements(fg_probs, cfg_probs, cov_idx);
-    select_vector_elements(bg_probs, cbg_probs, cov_idx);
-    
-    fg_emission.fit(cmeth_lp, cunmeth_lp, cfg_probs);
-    bg_emission.fit(cmeth_lp, cunmeth_lp, cbg_probs);
-    
-    update_imputed_methylv(meth, fg_probs, bg_probs);
-  }
-  else {  // DONT TRAIN IMPUTATED DATA POINTS
-    fg_emission.fit(meth_lp, unmeth_lp, fg_probs);
-    bg_emission.fit(meth_lp, unmeth_lp, bg_probs);
-  }
+  fg_emission.fit(meth_lp, unmeth_lp, fg_probs);
+  bg_emission.fit(meth_lp, unmeth_lp, bg_probs);
   
 }
 
@@ -360,30 +343,13 @@ TwoVarHMM::BaumWelchTraining(vector<pair<double, double> > &meth,
   cerr << "[ENTER BM-TRAINING]" << endl;
   
   vector<double> meth_lp(meth.size()), unmeth_lp(meth.size());
-  if (TRAINIMPUT) // imputation needed: some cpgs are not covered
-    for (size_t i = 0; i < meth.size(); ++i) {
-      if (meth[i].second < 0) { // missing data
-        meth_lp[i] = log(min(max(meth[i].first, 1e-2), 1.0 - 1e-2));
-        unmeth_lp[i] = 0;
-      }
-      else { // covered data
-        meth_lp[i] =
-        log(min(max(meth[i].first/(meth[i].first + meth[i].second), 1e-2),
+  for (size_t i = 0; i < meth.size(); ++i) {
+    meth_lp[i] =
+    log(min(max(meth[i].first/(meth[i].first + meth[i].second), 1e-2),
+            1.0 - 1e-2));
+    unmeth_lp[i] =
+    log(1 - min(max(meth[i].first/(meth[i].first + meth[i].second), 1e-2),
                 1.0 - 1e-2));
-        unmeth_lp[i] =
-        log(1 - min(max(meth[i].first/(meth[i].first + meth[i].second), 1e-2),
-                    1.0 - 1e-2));
-      }
-    }
-  else { // all cpgs are covered
-    for (size_t i = 0; i < meth.size(); ++i) {
-      meth_lp[i] =
-      log(min(max(meth[i].first/(meth[i].first + meth[i].second), 1e-2),
-              1.0 - 1e-2));
-      unmeth_lp[i] =
-      log(1 - min(max(meth[i].first/(meth[i].first + meth[i].second), 1e-2),
-                  1.0 - 1e-2));
-    }
   }
   
   size_t data_size = meth.size();
@@ -455,6 +421,7 @@ double
 TwoVarHMM::PosteriorDecoding(vector<pair<double, double> > &meth,
                              const vector<size_t> &time,
                              vector<int> &classes, vector<double> &llr_scores,
+                             double &mean_fg_meth, double &mean_bg_meth,
                              bool IMPUT){
   
   size_t data_size = meth.size();
@@ -496,8 +463,9 @@ TwoVarHMM::PosteriorDecoding(vector<pair<double, double> > &meth,
   vector<double> fg_probs(data_size, 0);
   vector<double> bg_probs(data_size, 0);
   
-  double mean_hmr_meth = 0, mean_nhmr_meth = 0;
-  size_t n_hmr_cpg = 0, n_nhmr_cpg = 0;
+  mean_fg_meth = 0;
+  mean_bg_meth = 0;
+  size_t n_fg_cpg = 0, n_bg_cpg = 0;
   
   for (size_t i = 0; i < data_size; ++i) {
     
@@ -507,31 +475,32 @@ TwoVarHMM::PosteriorDecoding(vector<pair<double, double> > &meth,
     bg_probs[i] = exp(bscore - denom);
     fg_probs[i] = exp(fscore - denom);
     
+    llr_scores[i] = fg_probs[i];
+
     if (bscore > fscore) {
       classes[i] = 0;
-      llr_scores[i] = bg_probs[i];
       if (meth[i].second >= 0) { // covered sites
-        mean_nhmr_meth += meth[i].first/(meth[i].first + meth[i].second);
-        n_nhmr_cpg++;
+        mean_bg_meth += meth[i].first/(meth[i].first + meth[i].second);
+        n_bg_cpg++;
       }
     } else {
       classes[i] = 1;
-      llr_scores[i] = fg_probs[i];
       if (meth[i].second >= 0) { // covered sites
-        mean_hmr_meth += meth[i].first/(meth[i].first + meth[i].second);
-        n_hmr_cpg++;
+        mean_fg_meth += meth[i].first/(meth[i].first + meth[i].second);
+        n_fg_cpg++;
       }
     }
   }
   
-  mean_hmr_meth = mean_hmr_meth / n_hmr_cpg;
-  mean_nhmr_meth = mean_nhmr_meth / n_nhmr_cpg;
-  
+  mean_fg_meth = mean_fg_meth / n_fg_cpg;
+  mean_bg_meth = mean_bg_meth / n_bg_cpg;
+ 
   // do imputation
   if (IMPUT) {
     for (size_t i = 0; i < data_size; ++i) {
       if (meth[i].second < 0) { // not-covered sites
-        meth[i].first = mean_hmr_meth*fg_probs[i] + mean_nhmr_meth*bg_probs[i];
+        meth[i].first = mean_fg_meth*fg_probs[i] + mean_bg_meth*bg_probs[i];
+        std::cout << meth[i].first << endl;
       }
     }
   }

@@ -43,12 +43,7 @@ public:
   TwoVarHMM(const double tol, const double minprob, const size_t max_itr,
             const bool v, const bool e, bool t = false, bool d = false) :
     tolerance(tol), MIN_PROB(minprob), max_iterations(max_itr),
-    VERBOSE(v), NO_RATE_EST(e), TRAINIMPUT(t), DEBUG(d) {}
-  
-  void set_trainimput(const bool t, const vector<size_t> &cov_index) {
-    TRAINIMPUT = t;
-    cov_idx = cov_index;
-  }
+    VERBOSE(v), NO_RATE_EST(e), DEBUG(d) {}
   
   void
   set_parameters(const BetaBin _fg_emission, const BetaBin _bg_emission,
@@ -65,7 +60,8 @@ public:
   double
   PosteriorDecoding(vector<pair<double, double> > &meth,
                     const vector<size_t> &time, vector<int> &classes,
-                    vector<double> &llr_scores, bool IMPUT = false);
+                    vector<double> &llr_scores, double &mean_fg_meth,
+                    double &mean_bg_meth, bool IMPUT = false);
  
   
 private:
@@ -136,10 +132,6 @@ private:
   size_t max_iterations;
   bool VERBOSE;
   bool NO_RATE_EST;
-  
-  // imputation
-  bool TRAINIMPUT;
-  vector<size_t> cov_idx;
   
   bool DEBUG;
 };
