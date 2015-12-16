@@ -95,25 +95,42 @@ load_cpgs(const string &cpgs_file, vector<SimpleGenomicRegion> &cpgs,
   }
 }
 
-template <class T, class U> static void
-rm_missingdata(const bool VERBOSE, vector<SimpleGenomicRegion> &cpgs,
-               vector<T> &meth, vector<U> &reads) {
-  if (VERBOSE)
-    cerr << "[REMOVE ZERO READ CPGS]" << endl;
-  size_t j = 0;
-  for (size_t i = 0; i < cpgs.size(); ++i)
-    if (reads[i] > 0) {
-      cpgs[j] = cpgs[i];
-      meth[j] = meth[i];
-      reads[j] = reads[i];
-      ++j;
-    }
-  cpgs.erase(cpgs.begin() + j, cpgs.end());
-  meth.erase(meth.begin() + j, meth.end());
-  reads.erase(reads.begin() + j, reads.end());
+static void
+load_coordinates(const string &coord_file, vector<SimpleGenomicRegion> &cpgs,
+                 vector<pair<double, double> > &meth, vector<size_t> &reads)
+{
   
-  if (VERBOSE)
-    cerr << "CPGS RETAINED: " << cpgs.size() << endl << endl;
+  string chrom, prev_chrom;
+  size_t pos, prev_pos = 0;
+  string strand, seq;
+  double level;
+  size_t coverage;
+  
+  std::ifstream in(cpgs_file.c_str());
+  
+  while (in >> chrom >> pos >> strand >> seq >> level >> coverage) {
+    // sanity check
+    if (chrom.empty() || strand.empty() || seq.empty()
+        || level < 0.0 || level > 1.0) {
+      std::ostringstream oss;
+      oss << chrom << "\t" << pos << "\t" << strand << "\t"
+      << seq << "\t" << level << "\t" << coverage << "\n";
+      throw SMITHLABException("Invalid input line:" + oss.str());
+    }
+    // order check
+    if (prev_chrom > chrom || (prev_chrom == chrom && prev_pos > pos)) {
+      throw SMITHLABException("CpGs not sorted in file \"" + cpgs_file + "\"");
+    }
+    prev_chrom = chrom;
+    prev_pos = pos;
+    
+    // append site
+    cpgs.push_back(SimpleGenomicRegion(chrom, pos, pos+1));
+    reads.push_back(coverage);
+    meth.push_back(std::make_pair(0.0, 0.0));
+    meth.back().first = static_cast<size_t>(round(level * coverage));
+    meth.back().second = static_cast<size_t>(coverage  - meth.back().first);
+  }
 }
 
 
@@ -142,7 +159,21 @@ mark_missing_cpg(const bool VERBOSE, const vector<U> &reads, vector<T> &meth,
 
 
 static void
-time_between_cpg(const vector<SimpleGenomicRegion> &cpgs,
+time_between_cpgs(const vector<SimpleGenomicRegion> &cpgs,
+                 vector<size_t> &time) {
+  SimpleGenomicRegion a = cpgs[0];
+  for (size_t i = 1; i < cpgs.size(); ++i) {
+    SimpleGenomicRegion b = cpgs[i];
+    const size_t dist = a.same_chrom(b) ?
+    b.get_start() - a.get_start() : numeric_limits<size_t>::max();
+    time.push_back(dist);
+    a = b;
+  }
+}
+
+
+static void
+time_between_cpgs(const vector<SimpleGenomicRegion> &cpgs,
                  vector<size_t> &time, const vector<size_t> &idx) {
   SimpleGenomicRegion a = cpgs[idx[0]];
   for (size_t i = 1; i < idx.size(); ++i) {
@@ -154,18 +185,6 @@ time_between_cpg(const vector<SimpleGenomicRegion> &cpgs,
   }
 }
 
-static void
-time_between_cpg(const vector<SimpleGenomicRegion> &cpgs,
-                 vector<size_t> &time) {
-  SimpleGenomicRegion a = cpgs[0];
-  for (size_t i = 1; i < cpgs.size(); ++i) {
-    SimpleGenomicRegion b = cpgs[i];
-    const size_t dist = a.same_chrom(b) ?
-    b.get_start() - a.get_start() : numeric_limits<size_t>::max();
-    time.push_back(dist);
-    a = b;
-  }
-}
 
 
 static void
@@ -254,8 +273,8 @@ static void
 build_domains(const bool VERBOSE,
               const vector<SimpleGenomicRegion> &cpgs,
               const vector<double> &post_scores,
-              const vector<int> &classes,
-              vector<GenomicRegion> &domains) {
+              const vector<int> &classes, vector<GenomicRegion> &domains,
+              const vector<size_t> &cov_idx) {
   
   static const int CLASS_ID = 1;
   size_t n_cpgs = 0, n_domains = 0, prev_end = 0;
@@ -265,7 +284,7 @@ build_domains(const bool VERBOSE,
     if (classes[i] == CLASS_ID) {
       if (!in_domain) {
         in_domain = true;
-        domains.push_back(GenomicRegion(cpgs[i]));
+        domains.push_back(GenomicRegion(cpgs[cov_idx[i]]));
         domains.back().set_name("HYPO" + toa(n_domains++));
       }
       ++n_cpgs;
@@ -292,7 +311,6 @@ main(int argc, const char **argv) {
     
     // run mode flags
     bool IMPUT = false;
-    bool TRAINIMPUT = false;
     bool VERBOSE = false;
     bool NOFDR = false;
     
@@ -305,27 +323,33 @@ main(int argc, const char **argv) {
     double fg_rate = 0.002;
     double bg_rate = 0.02;
     
-    string outfile, scores_file, imput_file;
+    string interp_coord_file, interped_coord_file;
+    string outfile, scores_file, compled_cpgs_file; // outputs
     
     /****************** COMMAND LINE OPTIONS ********************/
     OptionParser opt_parse(strip_path(argv[0]), "Program for identifying "
 			   "HMRs in methylation data", "<cpg-BED-file>");
     opt_parse.add_opt("out", 'o', "output hmr file (default: stdout)",
                       false, outfile);
-    opt_parse.add_opt("scores", 's', "scores file (WIG format)",
+    opt_parse.add_opt("scores", 's', "output scores file (WIG format)",
                       false, scores_file);
-    opt_parse.add_opt("fulldata", 'd', "imputated full data file (BED format)",
-                      false, imput_file);
-    opt_parse.add_opt("itr", 'i', "max iterations", false, max_iterations);
+    opt_parse.add_opt("compled_cpgs_file", 'c',
+                      "output complemented cpgs file (BED format)",
+                      false, compled_cpgs_file);
+    opt_parse.add_opt("interp_coord_file", 'p',
+                      "input coordinates to be interpolated (BED format)",
+                      false, interp_coord_file);
+    opt_parse.add_opt("interped_coord_file", 'p',
+                      "output interpolated bed file (BED format)",
+                      false, interped_coord_file);
     opt_parse.add_opt("imput", 'I', "imputation", false, IMPUT);
-    opt_parse.add_opt("train_imput", 'T', "imputation training",
-                      false, TRAINIMPUT);
-    opt_parse.add_opt("verbose", 'v', "print more run info", false, VERBOSE);
     opt_parse.add_opt("no_fdr_control", 'f', "fdr_control", false, NOFDR);
-    opt_parse.add_opt("fgrate", 'F', "fg rate", false, fg_rate);
-    opt_parse.add_opt("bgrate", 'B', "bg rate", false, bg_rate);
     opt_parse.add_opt("no_rate_est", 'r', "no rate estimation",
                       false, NO_RATE_EST);
+    opt_parse.add_opt("fgrate", 'F', "fg rate", false, fg_rate);
+    opt_parse.add_opt("bgrate", 'B', "bg rate", false, bg_rate);
+    opt_parse.add_opt("itr", 'i', "max iterations", false, max_iterations);
+    opt_parse.add_opt("verbose", 'v', "print more run info", false, VERBOSE);
     
     
     vector<string> leftover_args;
@@ -352,7 +376,10 @@ main(int argc, const char **argv) {
     /****************** END COMMAND LINE OPTIONS *****************/
     
     
-    // separate the regions by chrom and by desert
+    /***********************************
+     * STEP 1: LOAD CPGS AND COORDINATES
+     */
+    
     vector<SimpleGenomicRegion> cpgs;
     vector< pair<double, double> > meth;
     vector<size_t> reads;
@@ -365,21 +392,24 @@ main(int argc, const char **argv) {
       << accumulate(reads.begin(), reads.end(), 0.0)/reads.size()
       << endl << endl;
     
+    
+    /***********************************
+     * STEP 2: PREPROCESS RAW DATA
+     */
     vector<size_t> cov_idx;
+    vector<size_t> time;
+    mark_missing_cpg(VERBOSE, reads, meth, cov_idx);
 
-    if (!IMPUT) {
-      rm_missingdata(VERBOSE, cpgs, meth, reads); // only covered cpgs
-    }
-    else {
-      mark_missing_cpg(VERBOSE, reads, meth, cov_idx); // all cpgs
-    }
+    
+    /***********************************
+     * STEP 3: SET UP HMM MODEL
+     */
     
     // set-up distributions
     double fg_alpha = 0;
     double fg_beta = 0;
     double bg_alpha = 0;
     double bg_beta = 0;
-
     
     double n_reads;
     if (!IMPUT) {
@@ -402,29 +432,24 @@ main(int argc, const char **argv) {
     double p_ft = 1e-10;
     double p_bt = 1e-10;
    
-    // HMM initialization
+    // HMM initialization & setup
     TwoVarHMM hmm(tolerance, min_prob, max_iterations, VERBOSE, NO_RATE_EST);
 
-    if (TRAINIMPUT) hmm.set_trainimput(TRAINIMPUT, cov_idx);
-    
-    // HMM set parameters
     hmm.set_parameters(fg_emission, bg_emission, fg_rate, bg_rate,
                        p_sf, p_sb, p_ft, p_bt);
+
+    /***********************************
+     * STEP 4: HMM MODEL TRAINING
+     */
     
     vector< pair<double, double> > cmeth;
-    vector<size_t> time;
-    vector<size_t> ctime;
+    select_vector_elements(meth, cmeth, cov_idx);
+
+    vector<size_t> time, ctime;
+    time_between_cpgs(cpgs, time);
+    time_between_cpgs(cpgs, ctime, cov_idx);
     
-    time_between_cpg(cpgs, time);
-    
-    // HMM training
-    if (IMPUT && !TRAINIMPUT) { // select covered cpgs from all cpgs
-      select_vector_elements(meth, cmeth, cov_idx);
-      time_between_cpg(cpgs, ctime, cov_idx);
-      hmm.BaumWelchTraining(cmeth, ctime);
-    } else {
-      hmm.BaumWelchTraining(meth, time);
-    }
+    hmm.BaumWelchTraining(cmeth, ctime);
     
     /***********************************
      * STEP 5: DECODE THE DOMAINS
@@ -432,18 +457,19 @@ main(int argc, const char **argv) {
     
     vector<int> classes;
     vector<double> scores;
-    if (IMPUT) {
+    
+    if (IMPUT) { // decode all sites
       hmm.PosteriorDecoding(meth, time, classes, scores, IMPUT);
-    } else {
-      hmm.PosteriorDecoding(meth, time, classes, scores);
+    } else { // decode only covered sites
+      hmm.PosteriorDecoding(cmeth, ctime, classes, scores);
     }
-   
-
+ 
+    // decode the domains
     vector<double> domain_scores;
-    get_domain_scores(classes, meth, domain_scores);
+    get_domain_scores(classes, cmeth, domain_scores);
     
     vector<double> random_scores;
-    shuffle_cpgs(hmm, meth, time, random_scores, IMPUT);
+    shuffle_cpgs(hmm, cmeth, ctime, random_scores, IMPUT);
     
     vector<double> p_values;
     assign_p_values(random_scores, domain_scores, p_values);
@@ -451,11 +477,13 @@ main(int argc, const char **argv) {
     double fdr_cutoff = numeric_limits<double>::max();
     if (fdr_cutoff == numeric_limits<double>::max())
       fdr_cutoff = get_fdr_cutoff(p_values, 0.01);
-
   
     vector<GenomicRegion> domains;
-    build_domains(VERBOSE, cpgs, scores, classes, domains);
+    build_domains(VERBOSE, cpgs, scores, classes, domains, cov_idx);
     
+    /***********************************
+     * STEP 6: OUTPUT
+     */
     
     std::ofstream of;
     if (!outfile.empty()) of.open(outfile.c_str());
@@ -474,22 +502,24 @@ main(int argc, const char **argv) {
     // output posterior probabilities
     if (!scores_file.empty()) {
       std::ostream *out_scores = new std::ofstream(scores_file.c_str());
-      for (size_t i = 0; i < cpgs.size(); ++i) {
-        *out_scores << cpgs[i] << '\t' << scores[i] << endl;
+      for (size_t i = 0; i < cov_idx.size(); ++i) {
+        *out_scores << cpgs[cov_idx[i]] << '\t' << scores[i] << endl;
       }
     }
 
+    // output all cpgs including imputed uncover sites
     if (IMPUT) {
-      if (!imput_file.empty()) {
-        std::ostream *out_imput = new std::ofstream(imput_file.c_str());
+      if (!compled_cpgs_file.empty()) {
+        std::ostream *out_cpgs = new std::ofstream(compled_cpgs_file.c_str());
         for (size_t i = 0; i < cpgs.size(); ++i) {
           const double denom = (meth[i].second < 0) ?
                                 1 : (meth[i].first + meth[i].second);
-          *out_imput << cpgs[i] << '\t' << meth[i].first / denom << '\t'
-                     << reads[i] << endl;
+          *out_cpgs << cpgs[i] << '\t' << meth[i].first / denom << '\t'
+          << reads[i] << endl;
         }
       }
     }
+
   }
   catch (SMITHLABException &e) {
     cerr << "ERROR:\t" << e.what() << endl;
