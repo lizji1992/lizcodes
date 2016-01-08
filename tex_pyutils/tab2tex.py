@@ -71,10 +71,6 @@ def main():
                         help="input table")
     parser.add_argument('-o', '--output', dest='fout', required=True, \
                         help="output txt")
- #   parser.add_argument('--chrsize2', dest='chrsize_lift', nargs='*',\
- #           help="chromsize file for ucsc trackbuilding - liftover assembly")
- #   parser.add_argument('-c', '--chain', dest='chain', \
- #           help="ucsc chain file for liftover")
    
     args = parser.parse_args()
     tab = load_table(args.fin, args.column)
