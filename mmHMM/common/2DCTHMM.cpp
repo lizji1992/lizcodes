@@ -321,7 +321,7 @@ TwoVarHMM::single_iteration(vector<pair<double, double> > &meth,
   update_trans_estimator(meth, forward_score, te, r, ltp);
   
   if (!NO_RATE_EST) {
-    ExpTransEstimator estimate_trans(a, b);
+    ExpTransEstimator estimate_trans(a, b, BB);
     estimate_trans.mle_GradAscent(r, time);
     a = estimate_trans.get_a();
     b = estimate_trans.get_b();
@@ -421,7 +421,6 @@ double
 TwoVarHMM::PosteriorDecoding(vector<pair<double, double> > &meth,
                              const vector<size_t> &time,
                              vector<int> &classes, vector<double> &llr_scores,
-                             double &mean_fg_meth, double &mean_bg_meth,
                              bool IMPUT){
   
   size_t data_size = meth.size();
@@ -463,8 +462,8 @@ TwoVarHMM::PosteriorDecoding(vector<pair<double, double> > &meth,
   vector<double> fg_probs(data_size, 0);
   vector<double> bg_probs(data_size, 0);
   
-  mean_fg_meth = 0;
-  mean_bg_meth = 0;
+  double mean_fg_meth = 0;
+  double mean_bg_meth = 0;
   size_t n_fg_cpg = 0, n_bg_cpg = 0;
   
   for (size_t i = 0; i < data_size; ++i) {
@@ -500,7 +499,6 @@ TwoVarHMM::PosteriorDecoding(vector<pair<double, double> > &meth,
     for (size_t i = 0; i < data_size; ++i) {
       if (meth[i].second < 0) { // not-covered sites
         meth[i].first = mean_fg_meth*fg_probs[i] + mean_bg_meth*bg_probs[i];
-        std::cout << meth[i].first << endl;
       }
     }
   }

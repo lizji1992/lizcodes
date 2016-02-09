@@ -78,13 +78,15 @@ class ExpTransEstimator {
 public:
   
   ExpTransEstimator() : a(0.02), b(0.002),
-                        step_size(0.01), tolerance(1e-10), max_iteration(20) {}
-  ExpTransEstimator(const double _a,
-                    const double _b) : a(_a), b(_b),
-                   step_size(0.01), tolerance(1e-10), max_iteration(20) {}
+                        step_size(0.1), tolerance(1e-10), max_iteration(50),
+                        BB(true) {}
+  ExpTransEstimator(const double _a, const double _b, bool _BB = true) :
+                    a(_a), b(_b), step_size(0.1), tolerance(1e-10),
+                    max_iteration(50), BB(_BB) {}
   ExpTransEstimator(const double _a, const double _b, const double s,
-                    const double t, const size_t m) : a(_a), b(_b),
-                    step_size(s), tolerance(t), max_iteration(m) {}
+                    const double t, const size_t m, bool _BB = true) :
+                    a(_a), b(_b), step_size(s), tolerance(t), max_iteration(m),
+                    BB(_BB) {}
   
   void set_stepsize(const double s) {step_size = s;}
   void set_tolerance(const double t) {tolerance = t;}
@@ -98,6 +100,11 @@ public:
   void GA_stepforward(const double grad_a, const double grad_b,
                       const double &old_llh, double &new_llh,
                       const matrix &r, const vector<size_t> &t);
+  void GA_stepforward_BB(const double grad_a, const double grad_b,
+                         const double d_grad_a, const double d_grad_b,
+                         double &d_a, double &d_b,
+                         const double &old_llh, double &new_llh,
+                         const matrix &r, const vector<size_t> &t);
 
 private:
   
@@ -115,6 +122,7 @@ private:
   double step_size;
   double tolerance;
   size_t max_iteration;
+  bool BB;
   
 };
 

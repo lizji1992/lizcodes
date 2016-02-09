@@ -95,18 +95,19 @@ load_cpgs(const string &cpgs_file, vector<SimpleGenomicRegion> &cpgs,
   }
 }
 
+/*
 static void
-load_coordinates(const string &coord_file, vector<SimpleGenomicRegion> &cpgs,
+load_coordinates(const string &interp_coord_file,
+                 vector<SimpleGenomicRegion> &cpgs,
                  vector<pair<double, double> > &meth, vector<size_t> &reads)
 {
-  
   string chrom, prev_chrom;
   size_t pos, prev_pos = 0;
   string strand, seq;
   double level;
   size_t coverage;
   
-  std::ifstream in(cpgs_file.c_str());
+  std::ifstream in(interp_coord_file.c_str());
   
   while (in >> chrom >> pos >> strand >> seq >> level >> coverage) {
     // sanity check
@@ -132,7 +133,7 @@ load_coordinates(const string &coord_file, vector<SimpleGenomicRegion> &cpgs,
     meth.back().second = static_cast<size_t>(coverage  - meth.back().first);
   }
 }
-
+*/
 
 template <class T, class U> static void
 mark_missing_cpg(const bool VERBOSE, const vector<U> &reads, vector<T> &meth,
@@ -141,12 +142,10 @@ mark_missing_cpg(const bool VERBOSE, const vector<U> &reads, vector<T> &meth,
     cerr << "[SMOOTH ZERO READ CPGS]" << endl;
   
   size_t data_size = reads.size();
-  size_t cov_r = 0;
   
   for (size_t i = 0; i < data_size; ++i) {
     if (reads[i] > 0) {
       cov_idx.push_back(i);
-      cov_r = i + 1;
     } else {
       meth[i].first = 0;
       meth[i].second = -2;
@@ -190,13 +189,16 @@ time_between_cpgs(const vector<SimpleGenomicRegion> &cpgs,
 static void
 get_domain_scores(const vector<int> &classes,
                   const vector<pair<double, double> > &meth,
-                  vector<double> &scores) {
+                  vector<double> &scores, const vector<size_t> &cov_idx) {
+  bool imp = classes.size() == meth.size() ? false : true;
   static const int CLASS_ID = 1;
   size_t n_cpgs = 0;
   bool in_domain = false;
   double score = 0;
-  for (size_t i = 0; i < classes.size(); ++i) {
-    if (classes[i] == CLASS_ID) {
+  
+  for (size_t i = 0; i < meth.size(); ++i) {
+    int classid = imp ? classes[cov_idx[i]] : classes[i];
+    if (classid == CLASS_ID) {
       in_domain = true;
       const double denom = (meth[i].second < 0) ?
                             1 : (meth[i].first + meth[i].second);
@@ -215,15 +217,15 @@ get_domain_scores(const vector<int> &classes,
 static void
 shuffle_cpgs(TwoVarHMM &hmm, vector<pair<double, double> > meth,
              const vector<size_t> &mytime, vector<double> &domain_scores,
-             bool IMPUT = false) {
+             const vector<size_t> &cov_idx) {
   
   srand(time(0) + getpid());
   random_shuffle(meth.begin(), meth.end());
   
   vector<int> classes;
   vector<double> scores;
-  hmm.PosteriorDecoding(meth, mytime, classes, scores, IMPUT);
-  get_domain_scores(classes, meth, domain_scores);
+  hmm.PosteriorDecoding(meth, mytime, classes, scores);
+  get_domain_scores(classes, meth, domain_scores, cov_idx);
   sort(domain_scores.begin(), domain_scores.end());
 }
 
@@ -276,19 +278,22 @@ build_domains(const bool VERBOSE,
               const vector<int> &classes, vector<GenomicRegion> &domains,
               const vector<size_t> &cov_idx) {
   
+  bool imp = classes.size() == cov_idx.size() ? false : true;
   static const int CLASS_ID = 1;
   size_t n_cpgs = 0, n_domains = 0, prev_end = 0;
   bool in_domain = false;
   double score = 0;
-  for (size_t i = 0; i < classes.size(); ++i) {
-    if (classes[i] == CLASS_ID) {
+  
+  for (size_t i = 0; i < cov_idx.size(); ++i) {
+    int classid = imp ? classes[cov_idx[i]] : classes[i];
+    if (classid == CLASS_ID) {
       if (!in_domain) {
         in_domain = true;
         domains.push_back(GenomicRegion(cpgs[cov_idx[i]]));
         domains.back().set_name("HYPO" + toa(n_domains++));
       }
       ++n_cpgs;
-      score += post_scores[i];
+      score += imp ? post_scores[cov_idx[i]] : post_scores[i];
     }
     else if (in_domain) {
       in_domain = false;
@@ -297,7 +302,7 @@ build_domains(const bool VERBOSE,
       n_cpgs = 0;
       score = 0;
     }
-    prev_end = cpgs[i].get_end();
+    prev_end = cpgs[cov_idx[i]].get_end();
   }
 }
 
@@ -320,6 +325,7 @@ main(int argc, const char **argv) {
 
     // transition distribution on time
     bool NO_RATE_EST = false;
+    bool NO_BB_EST = false;
     double fg_rate = 0.002;
     double bg_rate = 0.02;
     
@@ -336,7 +342,7 @@ main(int argc, const char **argv) {
     opt_parse.add_opt("compled_cpgs_file", 'c',
                       "output complemented cpgs file (BED format)",
                       false, compled_cpgs_file);
-    opt_parse.add_opt("interp_coord_file", 'p',
+    opt_parse.add_opt("interp_coord_file", 'P',
                       "input coordinates to be interpolated (BED format)",
                       false, interp_coord_file);
     opt_parse.add_opt("interped_coord_file", 'p',
@@ -346,6 +352,9 @@ main(int argc, const char **argv) {
     opt_parse.add_opt("no_fdr_control", 'f', "fdr_control", false, NOFDR);
     opt_parse.add_opt("no_rate_est", 'r', "no rate estimation",
                       false, NO_RATE_EST);
+    opt_parse.add_opt("no_bb_est", 'b',
+                      "no Barzilai-Borwein method in rate estimation",
+                      false, NO_BB_EST);
     opt_parse.add_opt("fgrate", 'F', "fg rate", false, fg_rate);
     opt_parse.add_opt("bgrate", 'B', "bg rate", false, bg_rate);
     opt_parse.add_opt("itr", 'i', "max iterations", false, max_iterations);
@@ -397,7 +406,6 @@ main(int argc, const char **argv) {
      * STEP 2: PREPROCESS RAW DATA
      */
     vector<size_t> cov_idx;
-    vector<size_t> time;
     mark_missing_cpg(VERBOSE, reads, meth, cov_idx);
 
     
@@ -433,7 +441,8 @@ main(int argc, const char **argv) {
     double p_bt = 1e-10;
    
     // HMM initialization & setup
-    TwoVarHMM hmm(tolerance, min_prob, max_iterations, VERBOSE, NO_RATE_EST);
+    TwoVarHMM hmm(tolerance, min_prob, max_iterations, VERBOSE, NO_RATE_EST,
+                  !NO_BB_EST);
 
     hmm.set_parameters(fg_emission, bg_emission, fg_rate, bg_rate,
                        p_sf, p_sb, p_ft, p_bt);
@@ -445,7 +454,8 @@ main(int argc, const char **argv) {
     vector< pair<double, double> > cmeth;
     select_vector_elements(meth, cmeth, cov_idx);
 
-    vector<size_t> time, ctime;
+    vector<size_t> time;
+    vector<size_t> ctime;
     time_between_cpgs(cpgs, time);
     time_between_cpgs(cpgs, ctime, cov_idx);
     
@@ -466,10 +476,10 @@ main(int argc, const char **argv) {
  
     // decode the domains
     vector<double> domain_scores;
-    get_domain_scores(classes, cmeth, domain_scores);
+    get_domain_scores(classes, cmeth, domain_scores, cov_idx);
     
     vector<double> random_scores;
-    shuffle_cpgs(hmm, cmeth, ctime, random_scores, IMPUT);
+    shuffle_cpgs(hmm, cmeth, ctime, random_scores, cov_idx);
     
     vector<double> p_values;
     assign_p_values(random_scores, domain_scores, p_values);

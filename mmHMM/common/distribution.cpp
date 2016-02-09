@@ -216,7 +216,7 @@ void ExpTransEstimator::GA_stepforward(const double grad_a,
                                        const matrix &r,
                                        const vector<size_t> &t)  {
   
-  double try_step = 0.1 / abs(grad_a);
+  double try_step = std::max(std::min(1/abs(grad_a), step_size), tolerance);
   
   double new_a = a + try_step * grad_a;
   double new_b = b + try_step * grad_b;
@@ -241,7 +241,6 @@ void ExpTransEstimator::GA_stepforward(const double grad_a,
       calc_internal_data(t, new_b, ebt);
       moving_llh = calc_llh(r, new_a, ebt);
     }
-    
     ++itr;
   }
 
@@ -253,6 +252,61 @@ void ExpTransEstimator::GA_stepforward(const double grad_a,
   else {
     new_llh = old_llh;
   }
+  std::cout << try_step << " " << endl;
+}
+
+
+void
+ExpTransEstimator::GA_stepforward_BB(const double grad_a, const double grad_b,
+                                     const double d_grad_a,
+                                     const double d_grad_b,
+                                     double &d_a, double &d_b,
+                                     const double &old_llh, double &new_llh,
+                                     const matrix &r,
+                                     const vector<size_t> &t) {
+  
+  double try_step = abs(d_grad_a * d_a + d_grad_b * d_b) /
+  (d_grad_a * d_grad_a + d_grad_b * d_grad_b);
+  
+  try_step = std::max(try_step, tolerance);
+
+  double new_a = a + try_step * grad_a;
+  double new_b = b + try_step * grad_b;
+  
+  double moving_llh = - std::numeric_limits<double>::max();
+  
+  vector<double> ebt (t.size(), 0);
+  if (new_a > 0 && new_a < 1 && new_b > 0) {
+    calc_internal_data(t, new_b, ebt);
+    moving_llh = calc_llh(r, new_a, ebt);
+  }
+  
+  size_t itr = 1;
+  
+  while (moving_llh <= old_llh && abs(moving_llh - old_llh) > tolerance
+         && itr < max_iteration) {
+    try_step = try_step / 2;
+    new_a = a + try_step * grad_a;
+    new_a = b + try_step * grad_b;
+    
+    if (new_a > 0 && new_a < 1 && new_b > 0) {
+      calc_internal_data(t, new_b, ebt);
+      moving_llh = calc_llh(r, new_a, ebt);
+    }
+    ++itr;
+  }
+  
+  if (moving_llh > old_llh && new_a > 0 && new_a < 1 && new_b > 0) {
+    a = new_a;
+    b = new_b;
+    d_a = new_a - a;
+    d_b = new_b - b;
+    new_llh = moving_llh;
+  }
+  else {
+    new_llh = old_llh;
+  }
+  std::cout << try_step << " " << endl;
 }
 
 
@@ -263,23 +317,40 @@ void ExpTransEstimator::mle_GradAscent(const matrix &r,
   calc_internal_data(t, b, ebt);
   double curr_llh = calc_llh(r, a, ebt);
   
+  double a_old = a;
+  double b_old = b;
   double grad_a, grad_b;
   grad_a = llh_grad_a(r, ebt);
   grad_b = llh_grad_b(r, ebt);
-  
+
+  // first iteration
   double new_llh;
   GA_stepforward(grad_a, grad_b, curr_llh, new_llh, r, t);
   
+  double d_a = a - a_old;
+  double d_b = b - b_old;
+
+  double new_grad_a, new_grad_b;
+  double d_grad_a, d_grad_b;
   size_t itr = 1;
   
   while (abs(new_llh - curr_llh) > tolerance && itr < max_iteration) {
     curr_llh = new_llh;
     calc_internal_data(t, b, ebt);
-    grad_a = llh_grad_a(r, ebt);
-    grad_b = llh_grad_b(r, ebt);
-    GA_stepforward(grad_a, grad_b, curr_llh, new_llh, r, t);
+    if (BB) {
+      new_grad_a = llh_grad_a(r, ebt);
+      new_grad_b = llh_grad_b(r, ebt);
+      d_grad_a = new_grad_a - grad_a;
+      d_grad_b = new_grad_b - grad_b;
+      GA_stepforward_BB(new_grad_a, new_grad_b, d_grad_a, d_grad_b,
+                        d_a, d_b, curr_llh, new_llh, r, t);
+      grad_a = new_grad_a;
+      grad_b = new_grad_b;
+    } else {
+      grad_a = llh_grad_a(r, ebt);
+      grad_b = llh_grad_b(r, ebt);
+      GA_stepforward(grad_a, grad_b, curr_llh, new_llh, r, t);
+    }
     ++itr;
   }
 }
-
-
