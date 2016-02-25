@@ -185,6 +185,29 @@ time_between_cpgs(const vector<SimpleGenomicRegion> &cpgs,
 }
 
 
+static void
+read_params_file(const bool VERBOSE, const string &params_file,
+                 double &fg_rate, double &bg_rate,
+                 double &fg_alpha, double &fg_beta,
+                 double &bg_alpha, double &bg_beta) {
+  string jnk;
+  std::ifstream in(params_file.c_str());
+  in >> jnk >> fg_rate
+     >> jnk >> bg_rate
+     >> jnk >> fg_alpha
+     >> jnk >> fg_beta
+     >> jnk >> bg_alpha
+     >> jnk >> bg_beta;
+  if (VERBOSE)
+    cerr << "F_RATE\t" << fg_rate << endl
+         << "B_RATE\t" << bg_rate << endl
+         << "F_ALPHA\t" << fg_alpha << endl
+         << "F_BETA\t" << fg_beta << endl
+         << "B_ALPHA\t" << bg_alpha << endl
+         << "B_BETA\t" << bg_beta << endl;
+}
+
+
 
 static void
 get_domain_scores(const vector<int> &classes,
@@ -325,11 +348,12 @@ main(int argc, const char **argv) {
 
     // transition distribution on time
     bool NO_RATE_EST = false;
-    bool NO_BB_EST = false;
+    bool BB_EST = false;
     double fg_rate = 0.002;
     double bg_rate = 0.02;
     
-    string interp_coord_file, interped_coord_file;
+    //string interp_coord_file, interped_coord_file;
+    string params_in_file;
     string outfile, scores_file, compled_cpgs_file; // outputs
     
     /****************** COMMAND LINE OPTIONS ********************/
@@ -342,19 +366,15 @@ main(int argc, const char **argv) {
     opt_parse.add_opt("compled_cpgs_file", 'c',
                       "output complemented cpgs file (BED format)",
                       false, compled_cpgs_file);
-    opt_parse.add_opt("interp_coord_file", 'P',
-                      "input coordinates to be interpolated (BED format)",
-                      false, interp_coord_file);
-    opt_parse.add_opt("interped_coord_file", 'p',
-                      "output interpolated bed file (BED format)",
-                      false, interped_coord_file);
+    opt_parse.add_opt("params-in", 'P', "ctHMM parameters file (no training)",
+                      false, params_in_file);
     opt_parse.add_opt("imput", 'I', "imputation", false, IMPUT);
     opt_parse.add_opt("no_fdr_control", 'f', "fdr_control", false, NOFDR);
     opt_parse.add_opt("no_rate_est", 'r', "no rate estimation",
                       false, NO_RATE_EST);
-    opt_parse.add_opt("no_bb_est", 'b',
-                      "no Barzilai-Borwein method in rate estimation",
-                      false, NO_BB_EST);
+    opt_parse.add_opt("bb_est", 'b',
+                      "Barzilai-Borwein method in rate estimation",
+                      false, BB_EST);
     opt_parse.add_opt("fgrate", 'F', "fg rate", false, fg_rate);
     opt_parse.add_opt("bgrate", 'B', "bg rate", false, bg_rate);
     opt_parse.add_opt("itr", 'i', "max iterations", false, max_iterations);
@@ -426,10 +446,16 @@ main(int argc, const char **argv) {
       n_reads = accumulate(reads.begin(), reads.end(), 0.0)/cov_idx.size();
     }
     
-    fg_alpha = 0.33*n_reads;
-    fg_beta = 0.67*n_reads;
-    bg_alpha = 0.67*n_reads;
-    bg_beta = 0.33*n_reads;
+    if (!params_in_file.empty()) {
+      // READ THE PARAMETERS FILE
+      read_params_file(VERBOSE, params_in_file, fg_rate, bg_rate,
+                       fg_alpha, fg_beta, bg_alpha, bg_beta);
+    } else {
+      fg_alpha = 0.33*n_reads;
+      fg_beta = 0.67*n_reads;
+      bg_alpha = 0.67*n_reads;
+      bg_beta = 0.33*n_reads;
+    }
     
     BetaBin fg_emission = BetaBin(fg_alpha, fg_beta);
     BetaBin bg_emission = BetaBin(bg_alpha, bg_beta);
@@ -442,7 +468,7 @@ main(int argc, const char **argv) {
    
     // HMM initialization & setup
     TwoVarHMM hmm(tolerance, min_prob, max_iterations, VERBOSE, NO_RATE_EST,
-                  !NO_BB_EST);
+                  BB_EST);
 
     hmm.set_parameters(fg_emission, bg_emission, fg_rate, bg_rate,
                        p_sf, p_sb, p_ft, p_bt);
@@ -459,12 +485,17 @@ main(int argc, const char **argv) {
     time_between_cpgs(cpgs, time);
     time_between_cpgs(cpgs, ctime, cov_idx);
     
-    hmm.BaumWelchTraining(cmeth, ctime);
+    if (max_iterations >= 1) {
+      hmm.BaumWelchTraining(cmeth, ctime);
+    }
     
     /***********************************
      * STEP 5: DECODE THE DOMAINS
      */
     
+    if (VERBOSE)
+       cerr << "[ENTER POSTERIOR DECODING]" << endl;
+
     vector<int> classes;
     vector<double> scores;
     
