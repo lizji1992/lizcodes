@@ -69,7 +69,7 @@ TwoVarHMM::set_parameters(const BetaBin _fg_emission,
   bg_rate = _bg_rate;
  
   b = fg_rate + bg_rate;
-  a = fg_rate/b;
+  a = bg_rate/b;
   
   p_sf = _p_sf;
   p_sb = _p_sb;
@@ -323,10 +323,17 @@ TwoVarHMM::single_iteration(vector<pair<double, double> > &meth,
   if (!NO_RATE_EST) {
     ExpTransEstimator estimate_trans(a, b, BB);
     estimate_trans.mle_GradAscent(r, time);
-    a = estimate_trans.get_a();
-    b = estimate_trans.get_b();
-    fg_rate = a * b;
-    bg_rate = b - fg_rate;
+    double new_a = estimate_trans.get_a();
+    double new_b = estimate_trans.get_b();
+    double new_bg_rate = new_a * new_b;
+    double new_fg_rate = new_b - new_bg_rate;
+    if (fabs(new_fg_rate-fg_rate)/std::min(new_fg_rate, fg_rate) < 100 &&
+        fabs(new_bg_rate-bg_rate)/std::min(new_bg_rate, bg_rate) < 100) {
+      a = new_a;
+      b = new_b;
+      fg_rate = new_fg_rate;
+      bg_rate = new_bg_rate;
+    }
   }
 
   update_endprob(te);
@@ -404,7 +411,7 @@ TwoVarHMM::BaumWelchTraining(vector<pair<double, double> > &meth,
       << endl;
     }
     
-    if ((score - prev_score) < tolerance && score > prev_score) {
+    if ((score - prev_score) < tolerance && score >= prev_score) {
       if (VERBOSE)
         cerr << "CONVERGED" << endl << endl;
       break;
@@ -462,9 +469,9 @@ TwoVarHMM::PosteriorDecoding(vector<pair<double, double> > &meth,
   vector<double> fg_probs(data_size, 0);
   vector<double> bg_probs(data_size, 0);
   
-  double mean_fg_meth = 0;
-  double mean_bg_meth = 0;
-  size_t n_fg_cpg = 0, n_bg_cpg = 0;
+  //double mean_fg_meth = 0;
+  //double mean_bg_meth = 0;
+  //size_t n_fg_cpg = 0, n_bg_cpg = 0;
   
   for (size_t i = 0; i < data_size; ++i) {
     
@@ -478,23 +485,22 @@ TwoVarHMM::PosteriorDecoding(vector<pair<double, double> > &meth,
 
     if (bscore > fscore) {
       classes[i] = 0;
-      if (meth[i].second >= 0) { // covered sites
-        mean_bg_meth += meth[i].first/(meth[i].first + meth[i].second);
-        n_bg_cpg++;
-      }
+      //if (meth[i].second >= 0) { // covered sites
+      //  mean_bg_meth += meth[i].first/(meth[i].first + meth[i].second);
+      //  n_bg_cpg++;
+      //}
     } else {
       classes[i] = 1;
-      if (meth[i].second >= 0) { // covered sites
-        mean_fg_meth += meth[i].first/(meth[i].first + meth[i].second);
-        n_fg_cpg++;
-      }
+      //if (meth[i].second >= 0) { // covered sites
+      //  mean_fg_meth += meth[i].first/(meth[i].first + meth[i].second);
+      //  n_fg_cpg++;
+      //}
     }
   }
   
-  mean_fg_meth = mean_fg_meth / n_fg_cpg;
-  mean_bg_meth = mean_bg_meth / n_bg_cpg;
+  double mean_fg_meth = fg_emission.alpha / (fg_emission.alpha + fg_emission.beta);
+  double mean_bg_meth = bg_emission.alpha / (bg_emission.alpha + bg_emission.beta);
  
-  // do imputation
   if (IMPUT) {
     for (size_t i = 0; i < data_size; ++i) {
       if (meth[i].second < 0) { // not-covered sites

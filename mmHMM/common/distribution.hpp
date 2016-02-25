@@ -48,7 +48,7 @@ struct BetaBin
            const std::vector<double> &vals_b,
            const std::vector<double> &p);
   string tostring() const;
-  
+
   double alpha;
   double beta;
   double lnbeta_helper;
@@ -78,10 +78,10 @@ class ExpTransEstimator {
 public:
   
   ExpTransEstimator() : a(0.02), b(0.002),
-                        step_size(0.1), tolerance(1e-10), max_iteration(50),
+                        step_size(1e-5), tolerance(1e-10), max_iteration(50),
                         BB(true) {}
   ExpTransEstimator(const double _a, const double _b, bool _BB = true) :
-                    a(_a), b(_b), step_size(0.1), tolerance(1e-10),
+                    a(_a), b(_b), step_size(1e-5), tolerance(1e-10),
                     max_iteration(50), BB(_BB) {}
   ExpTransEstimator(const double _a, const double _b, const double s,
                     const double t, const size_t m, bool _BB = true) :
@@ -114,7 +114,8 @@ private:
                   const vector<double> &ebt) const;
   
   double llh_grad_a(const matrix &r, const vector<double> &ebt) const;
-  double llh_grad_b(const matrix &r, const vector<double> &ebt) const;
+  double llh_grad_b(const matrix &r, const vector<double> &ebt,
+                    const vector<size_t> &t) const;
 
   
   //  parameters

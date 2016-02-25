@@ -349,8 +349,8 @@ main(int argc, const char **argv) {
     // transition distribution on time
     bool NO_RATE_EST = false;
     bool BB_EST = false;
-    double fg_rate = 0.002;
-    double bg_rate = 0.02;
+    double fg_rate = 0.02;
+    double bg_rate = 0.002;
     
     //string interp_coord_file, interped_coord_file;
     string params_in_file;
