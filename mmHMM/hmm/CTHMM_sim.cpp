@@ -223,8 +223,8 @@ main(int argc, const char **argv)
     double readdepth_distro_n = 20;
     double readdepth_distro_p = 0.7;
     
-    double fg_rate = 0.0003;
-    double bg_rate = 0.005;
+    double bg_rate = 0.0003;
+    double fg_rate = 0.005;
     
     double bg_alpha = 2.4;
     double bg_beta = 0.6;
@@ -282,14 +282,14 @@ main(int argc, const char **argv)
     /****************** END COMMAND LINE OPTIONS *****************/
     
     if (VERBOSE)
-      cerr << "READCOV_N" << readdepth_distro_n << endl
-      << "READCOV_P" << readdepth_distro_p << endl
-      << "F_RATE : " << fg_rate << endl
-      << "B_RATE : " << bg_rate << endl
-      << "F_ALPHA : " << fg_alpha << endl
-      << "F_BETA : " << fg_beta << endl
-      << "B_ALPHA : " << bg_alpha << endl
-      << "B_BETA : " << bg_beta << endl;
+      cerr << "READCOV_N\t" << readdepth_distro_n << endl
+      << "READCOV_P\t" << readdepth_distro_p << endl
+      << "F_RATE\t" << fg_rate << endl
+      << "B_RATE\t" << bg_rate << endl
+      << "F_ALPHA\t" << fg_alpha << endl
+      << "F_BETA\t" << fg_beta << endl
+      << "B_ALPHA\t" << bg_alpha << endl
+      << "B_BETA\t" << bg_beta << endl;
     
     Runif rng(time(NULL));
     const gsl_rng_type * T;
@@ -320,7 +320,7 @@ main(int argc, const char **argv)
     size_t idx = 0;
     
     double b = fg_rate + bg_rate;
-    double a = fg_rate/b;
+    double a = bg_rate/b;
     // first region on each chromosome is always background
     sample_bg_cpgs(cpgs, idx, r, r_bgmeth, a, b, bg_alpha, bg_beta);
     
