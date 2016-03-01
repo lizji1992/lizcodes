@@ -288,7 +288,8 @@ double
 TwoVarHMM::single_iteration(vector<pair<double, double> > &meth,
                             const vector<size_t> &time,
                             const vector<double> &meth_lp,
-                            const vector<double> &unmeth_lp) {
+                            const vector<double> &unmeth_lp,
+                            const size_t curr_itr) {
   
   const double lp_sf = log(p_sf);
   const double lp_sb = log(p_sb);
@@ -327,8 +328,8 @@ TwoVarHMM::single_iteration(vector<pair<double, double> > &meth,
     double new_b = estimate_trans.get_b();
     double new_bg_rate = new_a * new_b;
     double new_fg_rate = new_b - new_bg_rate;
-    if (fabs(new_fg_rate-fg_rate)/std::min(new_fg_rate, fg_rate) < 100 &&
-        fabs(new_bg_rate-bg_rate)/std::min(new_bg_rate, bg_rate) < 100) {
+    if ((fabs(new_fg_rate-fg_rate)/std::min(new_fg_rate, fg_rate) < 5 &&
+        fabs(new_bg_rate-bg_rate)/std::min(new_bg_rate, bg_rate) < 5)) {
       a = new_a;
       b = new_b;
       fg_rate = new_fg_rate;
@@ -397,7 +398,8 @@ TwoVarHMM::BaumWelchTraining(vector<pair<double, double> > &meth,
   
   for(size_t i = 0; i < max_iterations; ++i) {
     
-    double score = single_iteration(meth, time, meth_lp, unmeth_lp);
+    double score = single_iteration(meth, time, meth_lp, unmeth_lp,
+                                    i+1);
     
     if (VERBOSE) {
       cerr << setw(5) << i + 1
@@ -468,10 +470,6 @@ TwoVarHMM::PosteriorDecoding(vector<pair<double, double> > &meth,
   
   vector<double> fg_probs(data_size, 0);
   vector<double> bg_probs(data_size, 0);
-  
-  //double mean_fg_meth = 0;
-  //double mean_bg_meth = 0;
-  //size_t n_fg_cpg = 0, n_bg_cpg = 0;
   
   for (size_t i = 0; i < data_size; ++i) {
     

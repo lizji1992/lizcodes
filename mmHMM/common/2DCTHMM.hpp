@@ -68,7 +68,7 @@ private:
   double
   single_iteration(vector<pair<double, double> > &meth,
                    const vector<size_t> &time, const vector<double> &meth_lp,
-                   const vector<double> &unmeth_lp);
+                   const vector<double> &unmeth_lp, const size_t curr_itr);
 
   double
   forward_algorithm(const vector<pair<double, double> > &meth,
