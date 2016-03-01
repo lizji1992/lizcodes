@@ -267,12 +267,10 @@ ExpTransEstimator::GA_stepforward_BB(const double grad_a, const double grad_b,
                                      const matrix &r,
                                      const vector<size_t> &t) {
   
-  double try_step = abs(d_grad_a * d_a + d_grad_b * d_b) /
+  double try_step = fabs(d_grad_a * d_a + d_grad_b * d_b) /
   (d_grad_a * d_grad_a + d_grad_b * d_grad_b);
   
-  try_step = std::max(std::min(try_step, step_size), tolerance);
- // std::cout << "begin step: " << try_step; 
-
+  
   double new_a = a + try_step * grad_a;
   double new_b = b + try_step * grad_b;
   
@@ -300,16 +298,14 @@ ExpTransEstimator::GA_stepforward_BB(const double grad_a, const double grad_b,
   }
   
   if (moving_llh > old_llh && new_a > 0 && new_a < 1 && new_b > 0) {
-    a = new_a;
-    b = new_b;
     d_a = new_a - a;
     d_b = new_b - b;
+    a = new_a;
+    b = new_b;
     new_llh = moving_llh;
-   // std::cout << ". Search succeeds! end step: " << try_step << endl; 
   }
   else {
     new_llh = old_llh;
-    //std::cout << ". Search fails! end step: " << try_step << endl;
   }
 }
 
