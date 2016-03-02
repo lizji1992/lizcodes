@@ -328,8 +328,9 @@ TwoVarHMM::single_iteration(vector<pair<double, double> > &meth,
     double new_b = estimate_trans.get_b();
     double new_bg_rate = new_a * new_b;
     double new_fg_rate = new_b - new_bg_rate;
-    if ((fabs(new_fg_rate-fg_rate)/std::min(new_fg_rate, fg_rate) < 5 &&
-        fabs(new_bg_rate-bg_rate)/std::min(new_bg_rate, bg_rate) < 5)) {
+    double lim = max_iterations;
+    if ((fabs(new_fg_rate-fg_rate)/std::min(new_fg_rate, fg_rate) < lim &&
+        fabs(new_bg_rate-bg_rate)/std::min(new_bg_rate, bg_rate) < lim)) {
       a = new_a;
       b = new_b;
       fg_rate = new_fg_rate;
