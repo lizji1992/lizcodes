@@ -348,7 +348,7 @@ main(int argc, const char **argv) {
 
     // transition distribution on time
     bool NO_RATE_EST = false;
-    bool BB_EST = false;
+    int rate_est_method = 0;
     double fg_rate = 0.02;
     double bg_rate = 0.002;
     
@@ -372,9 +372,9 @@ main(int argc, const char **argv) {
     opt_parse.add_opt("no_fdr_control", 'f', "fdr_control", false, NOFDR);
     opt_parse.add_opt("no_rate_est", 'r', "no rate estimation",
                       false, NO_RATE_EST);
-    opt_parse.add_opt("bb_est", 'b',
-                      "Barzilai-Borwein method in rate estimation",
-                      false, BB_EST);
+    opt_parse.add_opt("method", 'm',
+                      "rate estimation method: 0-CG, 1-GA_BB, 2-GA",
+                      false, rate_est_method);
     opt_parse.add_opt("fgrate", 'F', "fg rate", false, fg_rate);
     opt_parse.add_opt("bgrate", 'B', "bg rate", false, bg_rate);
     opt_parse.add_opt("itr", 'i', "max iterations", false, max_iterations);
@@ -468,7 +468,7 @@ main(int argc, const char **argv) {
    
     // HMM initialization & setup
     TwoVarHMM hmm(tolerance, min_prob, max_iterations, VERBOSE, NO_RATE_EST,
-                  BB_EST);
+                  rate_est_method);
 
     hmm.set_parameters(fg_emission, bg_emission, fg_rate, bg_rate,
                        p_sf, p_sb, p_ft, p_bt);

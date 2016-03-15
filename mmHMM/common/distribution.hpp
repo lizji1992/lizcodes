@@ -26,13 +26,13 @@
 
 #include <gsl/gsl_sf_psi.h>
 #include <gsl/gsl_sf_gamma.h>
+#include <gsl/gsl_vector.h>
 
 using std::vector;
 using std::string;
 
 typedef vector< vector<double> > matrix;
 
-// struct BetaBin;
 struct BetaBin
 {
   BetaBin() : alpha(1), beta(1), lnbeta_helper(gsl_sf_lnbeta(1, 1)),
@@ -56,23 +56,13 @@ struct BetaBin
 };
 
 
-struct NegBin
-{
-  NegBin() : r(2), p(0.5) {set_helpers();}
-  NegBin(const size_t a, const double b) : r(a), p(b) {set_helpers();}
-  
-  void set_helpers();
-  
-  size_t r; // num of failure
-  double p; // prob of failure
-  double r_log_p_minus_lngamma_r; // helper
-};
-
-
 //////////////////////////////////////////////
 //////       struct CTHMM duration      //////
 //////////////////////////////////////////////
 
+double f(const gsl_vector *x, void *params);
+void df(const gsl_vector *x, void *params, gsl_vector *d);
+void fdf(const gsl_vector *x, void *params, double *fp, gsl_vector *d);
 
 class ExpTransEstimator {
 public:
@@ -105,6 +95,8 @@ public:
                          double &d_a, double &d_b,
                          const double &old_llh, double &new_llh,
                          const matrix &r, const vector<size_t> &t);
+  // CONJUGATE GRADIENT METHOD
+  void mle_CG(const matrix &r, const vector<size_t> &t);
 
 private:
   
@@ -112,12 +104,10 @@ private:
                           vector<double> &ebt) const;
   double calc_llh(const matrix &r, const double u,
                   const vector<double> &ebt) const;
-  
   double llh_grad_a(const matrix &r, const vector<double> &ebt) const;
   double llh_grad_b(const matrix &r, const vector<double> &ebt,
                     const vector<size_t> &t) const;
 
-  
   //  parameters
   double a, b;
   double step_size;

@@ -322,8 +322,10 @@ TwoVarHMM::single_iteration(vector<pair<double, double> > &meth,
   update_trans_estimator(meth, forward_score, te, r, ltp);
   
   if (!NO_RATE_EST) {
+    bool BB = (method == 1) ? true : false;
     ExpTransEstimator estimate_trans(a, b, BB);
-    estimate_trans.mle_GradAscent(r, time);
+    if (method == 0) estimate_trans.mle_CG(r, time);
+    else estimate_trans.mle_GradAscent(r, time);
     double new_a = estimate_trans.get_a();
     double new_b = estimate_trans.get_b();
     double new_bg_rate = new_a * new_b;
@@ -414,7 +416,7 @@ TwoVarHMM::BaumWelchTraining(vector<pair<double, double> > &meth,
       << endl;
     }
     
-    if ((score - prev_score) < tolerance && score >= prev_score) {
+    if (fabs(score - prev_score) < tolerance) {
       if (VERBOSE)
         cerr << "CONVERGED" << endl << endl;
       break;

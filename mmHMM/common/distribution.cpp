@@ -28,6 +28,8 @@
 
 #include <gsl/gsl_sf_psi.h>
 #include <gsl/gsl_sf_gamma.h>
+#include <gsl/gsl_vector.h>
+#include <gsl/gsl_multimin.h>
 
 
 using std::vector;
@@ -143,17 +145,6 @@ BetaBin::fit(const vector<double> &vals_a, const vector<double> &vals_b,
 
 
 //////////////////////////////////////////////
-//////       struct NegBin              //////
-//////////////////////////////////////////////
-
-void
-NegBin::set_helpers() {
-  r_log_p_minus_lngamma_r = r*log(p) - gsl_sf_lngamma(r);
-  r_log_p_minus_lngamma_r = log(1 - p);
-}
-
-
-//////////////////////////////////////////////
 //////       struct CTHMM duration      //////
 //////////////////////////////////////////////
 
@@ -223,7 +214,6 @@ void ExpTransEstimator::GA_stepforward(const double grad_a,
   double new_b = b + try_step * grad_b;
   
   double moving_llh = - std::numeric_limits<double>::max();
-  //std::cout << "begin step: " << try_step; 
   vector<double> ebt (t.size(), 0);
   if (new_a > 0 && new_a < 1 && new_b > 0) {
     calc_internal_data(t, new_b, ebt);
@@ -249,11 +239,9 @@ void ExpTransEstimator::GA_stepforward(const double grad_a,
     a = new_a;
     b = new_b;
     new_llh = moving_llh;
-    //std::cout << ". Search succeeds! end step: " << try_step << endl; 
   }
   else {
     new_llh = old_llh;
-    //std::cout << ". Search fails! end step: " << try_step << endl;
   }
 }
 
@@ -270,7 +258,6 @@ ExpTransEstimator::GA_stepforward_BB(const double grad_a, const double grad_b,
   double try_step = fabs(d_grad_a * d_a + d_grad_b * d_b) /
   (d_grad_a * d_grad_a + d_grad_b * d_grad_b);
   
-  
   double new_a = a + try_step * grad_a;
   double new_b = b + try_step * grad_b;
   
@@ -281,7 +268,6 @@ ExpTransEstimator::GA_stepforward_BB(const double grad_a, const double grad_b,
     calc_internal_data(t, new_b, ebt);
     moving_llh = calc_llh(r, new_a, ebt);
   }
-  
   size_t itr = 1;
   
   while (moving_llh <= old_llh && abs(moving_llh - old_llh) > tolerance
@@ -312,13 +298,11 @@ ExpTransEstimator::GA_stepforward_BB(const double grad_a, const double grad_b,
 
 void ExpTransEstimator::mle_GradAscent(const matrix &r,
                                        const vector<size_t> &t) {
-  
   vector<double> ebt (t.size(), 0);
   calc_internal_data(t, b, ebt);
   double curr_llh = calc_llh(r, a, ebt);
   
-  double a_old = a;
-  double b_old = b;
+  double a_old = a, b_old = b;
   double grad_a, grad_b;
   grad_a = llh_grad_a(r, ebt);
   grad_b = llh_grad_b(r, ebt, t);
@@ -333,7 +317,7 @@ void ExpTransEstimator::mle_GradAscent(const matrix &r,
   double new_grad_a, new_grad_b;
   double d_grad_a, d_grad_b;
   size_t itr = 1;
-  
+ 
   while (abs(new_llh - curr_llh) > tolerance && itr < max_iteration) {
     curr_llh = new_llh;
     calc_internal_data(t, b, ebt);
@@ -353,4 +337,139 @@ void ExpTransEstimator::mle_GradAscent(const matrix &r,
     }
     ++itr;
   }
+  cerr << "Used " << itr << " iterations." << endl;
+}
+
+// CONJUGATE GRADIENT METHOD
+
+double
+f(const gsl_vector *x, void *params) {
+  double *par = (double *) params;
+  size_t n = par[0];
+  double u = gsl_vector_get(x, 0);
+  double v = gsl_vector_get(x, 1);
+
+  double val = 0;
+  for (size_t i = 0; i < n; ++i) {
+    size_t s = i * 5;
+    const double ebt = exp(- v * par[s+5]);
+    const double d = par[s+1]*log(1 - u + u * ebt)
+                     + par[s+2]*log(u - u * ebt)
+                     + par[s+3]*log(1 - u - (1 - u) * ebt)
+                     + par[s+4]*log(u + (1 - u) * ebt);
+    val -= d;
+  }
+  return val;
+}
+
+void
+df(const gsl_vector *x, void *params, gsl_vector *d) {
+  double *par = (double *) params;
+  size_t n = par[0];
+  double u = gsl_vector_get(x, 0);
+  double v = gsl_vector_get(x, 1);
+  
+  double da = 0;
+  double db = 0; 
+  for (size_t i = 0; i < n; ++i) {
+    const size_t s = i * 5;
+    const double t = par[s+5];
+    const double ebt = exp(- v * t);
+    da -= par[s+1]*( (-1+ebt) / (1-u+u*ebt) )
+          + par[s+2]*( (1) / (u) )
+          + par[s+3]*( (1) / (u-1) )
+          + par[s+4]*( (1-ebt) / (u+(1-u)*ebt) );
+ 
+    db -= par[s+1]*( (-u*t*ebt) / (1-u+u*ebt) )
+          + (par[s+2] + par[s+3]) * ( (t*ebt) / (1-ebt) )
+          + par[s+4]*( (-(1-u)*t*ebt) / (u+(1-u)*ebt) );
+  } 
+  //cerr << "da: " << da  << ", db: " << db << endl;
+  gsl_vector_set(d, 0, da);
+  gsl_vector_set(d, 1, db);
+}
+
+void
+fdf(const gsl_vector *x, void *params, double *fp,
+                       gsl_vector *d) {
+  *fp = f(x, params);
+  df(x, params, d);
+}
+
+
+void ExpTransEstimator::mle_CG(const matrix &r, const vector<size_t> &t) {
+
+  // build up parameter list
+  size_t n = t.size();
+  double params[5*n+1];
+
+  params[0] = n;  // the first parameter is the length of sequence
+  for (size_t i = 0; i < n; ++i) {
+    const size_t s = i * 5;
+    params[s+1] = r[0][i];
+    params[s+2] = r[1][i];
+    params[s+3] = r[2][i];
+    params[s+4] = r[3][i];
+    params[s+5] = t[i];
+  }
+
+  gsl_multimin_function_fdf func;
+  func.f = &f;
+  func.df = &df;
+  func.fdf = &fdf;
+  func.n = 2;
+  func.params = &params;
+
+  // set starting point
+  gsl_vector *x = gsl_vector_alloc(2);
+  gsl_vector_set(x, 0, a);
+  gsl_vector_set(x, 1, b);
+
+  // allocate and set the minimizer and its type
+  const gsl_multimin_fdfminimizer_type *type =
+    gsl_multimin_fdfminimizer_conjugate_fr;
+  gsl_multimin_fdfminimizer *minimizer =
+    gsl_multimin_fdfminimizer_alloc (type, 2);
+
+  // set tolerance and starting step size
+  gsl_multimin_fdfminimizer_set(minimizer, &func, x, step_size, tolerance);
+
+  size_t itr = 0;
+  int status = 0;
+
+  itr++;
+  status = gsl_multimin_fdfminimizer_iterate(minimizer);
+  // check for convergence
+  status = gsl_multimin_test_gradient(minimizer->gradient, tolerance);
+  double last_legal_a = a, last_legal_b = b;
+  double new_a = gsl_vector_get(minimizer->x, 0);
+  double new_b = gsl_vector_get(minimizer->x, 1);
+  if (new_a > 0 && new_a < 1 && new_b > 0) {
+    last_legal_a = new_a;
+    last_legal_b = new_b;
+  }
+
+  while (status == GSL_CONTINUE && itr < max_iteration &&
+         new_a > 0 && new_a < 1 && new_b > 0) {
+    itr++;
+    status = gsl_multimin_fdfminimizer_iterate(minimizer);
+
+    if (status) break; 
+    status = gsl_multimin_test_gradient(minimizer->gradient, tolerance);
+    
+    new_a = gsl_vector_get(minimizer->x, 0);
+    new_b = gsl_vector_get(minimizer->x, 1);
+    if (new_a > 0 && new_a < 1 && new_b > 0) {
+      last_legal_a = new_a;
+      last_legal_b = new_b;
+    }
+    //cerr << "new a: " << new_a << " new b: " << new_b << endl;
+  }
+  cerr << "Used " << itr << " iterations." << endl;
+  
+  a = last_legal_a;
+  b = last_legal_b;
+  // free the memory
+  gsl_multimin_fdfminimizer_free(minimizer);
+  gsl_vector_free(x);
 }

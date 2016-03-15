@@ -41,9 +41,9 @@ class TwoVarHMM {
 public:
   
   TwoVarHMM(const double tol, const double minprob, const size_t max_itr,
-            const bool v, const bool e, bool B = true, bool d = false) :
+            const bool v, const bool e, int m = 0, bool d = false) :
     tolerance(tol), MIN_PROB(minprob), max_iterations(max_itr),
-    VERBOSE(v), NO_RATE_EST(e), BB(B), DEBUG(d) {}
+    VERBOSE(v), NO_RATE_EST(e), method(m), DEBUG(d) {}
   
   void
   set_parameters(const BetaBin _fg_emission, const BetaBin _bg_emission,
@@ -131,7 +131,7 @@ private:
   size_t max_iterations;
   bool VERBOSE;
   bool NO_RATE_EST;
-  bool BB;
+  int method;
   bool DEBUG;
 };
 #endif
