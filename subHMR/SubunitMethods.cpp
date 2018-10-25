@@ -24,13 +24,11 @@
 
 #include <string>
 #include <vector>
-#include <tr1/unordered_map>
 #include "SubunitMethods.hpp"
 
-
+using std::unordered_map;
 using std::string;
 using std::vector;
-using namespace std::tr1;
 using std::pair;
 
 using std::vector;

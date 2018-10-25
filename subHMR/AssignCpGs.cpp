@@ -24,7 +24,6 @@
 #include <numeric>
 #include <limits>
 #include <cmath>
-#include <tr1/unordered_map>
 #include "OptionParser.hpp"
 #include "smithlab_utils.hpp"
 #include "smithlab_os.hpp"
@@ -34,11 +33,10 @@
 using std::string;
 using std::vector;
 using std::pair;
-using namespace std::tr1;
 using std::endl;
 using std::cerr;
 using std::sort;
-
+using std::unordered_map;
 
 
 ///////////////////////////////////////////////////////////////////////////
