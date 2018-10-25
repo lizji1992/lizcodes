@@ -40,7 +40,7 @@ using std::endl;
 using std::max;
 using std::min;
 using std::accumulate;
-using std::tr1::unordered_map;
+using std::unordered_map;
 using std::ptr_fun;
 
 
@@ -54,27 +54,27 @@ struct FASTQRecord {
   string tostring() const {
     string tmp;
     std::ostringstream s;
-    s << '@' << name << '\n' << seq << '\n' << tmp << '\n' << score;  
+    s << '@' << name << '\n' << seq << '\n' << tmp << '\n' << score;
     return s.str();
   }
-    
+
   void revcomp();
-  
+
   // see if two reads from two ends match to each other
   // (they should have the same name)
-  static bool 
+  static bool
   mates(const size_t to_ignore_at_end, // in case names have #0/1 name ends
   const FASTQRecord &a, const FASTQRecord &b) {
     const string namefield1 = a.name.substr(0, a.name.find_first_of(' '));
     const string namefield2 = b.name.substr(0, b.name.find_first_of(' '));
 
-    const bool same_name = 
-               equal(namefield1.begin(), 
+    const bool same_name =
+               equal(namefield1.begin(),
                namefield1.begin() + namefield1.length() - to_ignore_at_end,
                namefield2.begin());
     return same_name && a.seq.length() == b.seq.length();
   }
-  
+
 };
 
 // Reverse the sequence
@@ -88,27 +88,27 @@ FASTQRecord::revcomp() {
   reverse(score.begin(), score.end());
 }
 
-std::ostream& 
+std::ostream&
 operator<<(std::ostream& s, const FASTQRecord &r) {
   return s << r.tostring();
 }
 
 // Read 4 lines one time from fastq and fill in the FASTQRecord structure
-std::istream& 
+std::istream&
 operator>>(std::istream& s, FASTQRecord &r) {
   if (getline(s, r.name)) {
-    if (r.name.empty() || r.name[0] != '@') 
+    if (r.name.empty() || r.name[0] != '@')
       throw SMITHLABException("FASTQ file out of sync at '@'");
-    
+
     if (!getline(s, r.seq))
       throw SMITHLABException("FASTQ file truncated expecting seq");
-    
+
     if (!getline(s, r.seqtag))
       throw SMITHLABException("FASTQ file truncated expecting '+' line");
-    
-    if (r.seqtag.empty() || r.seqtag[0] != '+') 
+
+    if (r.seqtag.empty() || r.seqtag[0] != '+')
       throw SMITHLABException("FASTQ file out of sync [missing '+']");
-    
+
     if (!getline(s, r.score))
       throw SMITHLABException("FASTQ file truncated expecting score");
   }
@@ -145,7 +145,7 @@ invdup_similarity(FASTQRecord &r1, FASTQRecord &r2,
   size_t sim_GA = 0;
 
   if (pos_count_overlap.empty()) pos_count_overlap.resize(r1.seq.size());
-  
+
   string::const_iterator it1(r1.seq.begin());
   string::const_iterator it2(r2.seq.begin());
   vector<size_t>::iterator it_pos(pos_count_overlap.begin());
@@ -169,7 +169,7 @@ invdup_similarity(FASTQRecord &r1, FASTQRecord &r2,
   return sim;
 }
 
-int 
+int
 main(int argc, const char **argv) {
 
   try {
@@ -180,19 +180,19 @@ main(int argc, const char **argv) {
     double cutoff = 0.95;
     size_t to_ignore_at_end_of_name = 0;
     bool VERBOSE = false;
-    
+
     /****************** COMMAND LINE OPTIONS ********************/
     OptionParser opt_parse(strip_path(argv[0]), "count the invdup reads "
                            "in the input files", "<end1-fastq> <end2-fastq>");
-    opt_parse.add_opt("output", 'o', 
-                      "Name of the scanning results (default: stdout)", 
+    opt_parse.add_opt("output", 'o',
+                      "Name of the scanning results (default: stdout)",
                       false, fp_repo);
     opt_parse.add_opt("stat", 's',
-                      "Name of the output stats file (default: stdout)", 
+                      "Name of the output stats file (default: stdout)",
                       false, fp_stat);
     opt_parse.add_opt("masking", 'm',
                       "Name of the new second-end fastq file "
-                      "if you want to mask the invdup reads", 
+                      "if you want to mask the invdup reads",
                       false, fp_proc_fq);
     opt_parse.add_opt("cutoff", 'c',
                       "The cutoff for invdup reads (default: 0.95)",
@@ -223,19 +223,19 @@ main(int argc, const char **argv) {
     std::ifstream if_read1(reads_file_one.c_str());
     if(!if_read1)
       throw SMITHLABException("cannot open input file " + reads_file_one);
-    
+
     std::ifstream if_read2(reads_file_two.c_str());
     if(!if_read2)
       throw SMITHLABException("cannot open input file " + reads_file_two);
 
-    // Output scanning results: 
+    // Output scanning results:
     std::ofstream of_repo;
     if (!fp_repo.empty()) of_repo.open(fp_repo.c_str());
-    std::ostream os_repo(fp_repo.empty() ? cout.rdbuf() : of_repo.rdbuf());   
+    std::ostream os_repo(fp_repo.empty() ? cout.rdbuf() : of_repo.rdbuf());
 
     string fp_repo_brick = fp_repo + ".brick";
     std::ofstream of_repo_brick(fp_repo_brick.c_str());
-    
+
     // Output the proccessed fastq files:
     std::ofstream of_proc_fq(fp_proc_fq.c_str());
     if(!fp_proc_fq.empty() && !of_proc_fq)
@@ -250,12 +250,12 @@ main(int argc, const char **argv) {
     FASTQRecord end_one, end_two;
 
     while (if_read1 >> end_one && if_read2 >> end_two) {
-      
+
       // Two reads should be in paired-ends
-      if (!FASTQRecord::mates(to_ignore_at_end_of_name, end_one, end_two)) 
-        throw SMITHLABException("expected mates, got:" + 
+      if (!FASTQRecord::mates(to_ignore_at_end_of_name, end_one, end_two))
+        throw SMITHLABException("expected mates, got:" +
               end_one.tostring() + "\n" + end_two.tostring());
-      
+
       // See if inverted duplicates emerge
       string brick_end1;
       string brick_end2;
@@ -266,7 +266,7 @@ main(int argc, const char **argv) {
       // percent_overlap[1] = two wildcards are not allowed at the same time
       percent_overlap[0] = static_cast<double>(sim[0])/end_one.seq.length();
       percent_overlap[1] = static_cast<double>(sim[1])/end_one.seq.length();
-      
+
       if (percent_overlap[0] > cutoff) {
         num_bad_read[0]++;
         sum_bad_percent_overlap[0] += percent_overlap[0];
@@ -276,11 +276,11 @@ main(int argc, const char **argv) {
         sum_bad_percent_overlap[1] += percent_overlap[1];
       }
 
-      // Write new fastq file if -n 
+      // Write new fastq file if -n
       if (of_proc_fq) {
         const string masked_seq(end_two.seq.length(), 'N');
         of_proc_fq << end_two.name << "\n";
-        if (percent_overlap[0] > cutoff) 
+        if (percent_overlap[0] > cutoff)
           of_proc_fq << masked_seq << "\n";
         else {
           of_proc_fq << end_two.seq << "\n";
@@ -292,27 +292,27 @@ main(int argc, const char **argv) {
       num_read++;
       sum_percent_overlap[0] += percent_overlap[0];
       sum_percent_overlap[1] += percent_overlap[1];
-      os_repo << sim[0] << "," << sim[1] << '\t' 
+      os_repo << sim[0] << "," << sim[1] << '\t'
               << percent_overlap[0] << "," << percent_overlap[1] << "\n";
-      if (percent_overlap[0] > cutoff) 
+      if (percent_overlap[0] > cutoff)
         of_repo_brick << brick_end1 << "\n"
                       << brick_end2 << "\n" << endl;
     }
     //------------WRITE STAT INFORMATION------------//
     std::ofstream of_stat;
     if (!fp_stat.empty()) of_stat.open(fp_stat.c_str());
-    std::ostream os_stat(fp_stat.empty() ? cout.rdbuf() : of_stat.rdbuf()); 
-    os_stat << "CUTOFF:\t" << cutoff << "\n" 
-            << "TOTAL READ PAIRS:\t" << num_read << "\n"  
-            << "SUSPECT INVERTED-DUPLICATED READ PAIRS:\t" 
-            << num_bad_read[0] << "," << num_bad_read[1] << "\n"  
-            << "PERCENTAGE OF GOOD READS:\t" 
-            << 1 - static_cast<double>(num_bad_read[0])/num_read << ","  
-            << 1 - static_cast<double>(num_bad_read[1])/num_read << "\n"  
-            << "MEAN OVERLAP PERCENTAGE:\t" 
-            << sum_percent_overlap[0]/num_read << "," 
-            << sum_percent_overlap[1]/num_read << "\n" 
-            << "MEAN OVERLAP PERCENTAGE OF INVERTED-DUPLICATES:\t" 
+    std::ostream os_stat(fp_stat.empty() ? cout.rdbuf() : of_stat.rdbuf());
+    os_stat << "CUTOFF:\t" << cutoff << "\n"
+            << "TOTAL READ PAIRS:\t" << num_read << "\n"
+            << "SUSPECT INVERTED-DUPLICATED READ PAIRS:\t"
+            << num_bad_read[0] << "," << num_bad_read[1] << "\n"
+            << "PERCENTAGE OF GOOD READS:\t"
+            << 1 - static_cast<double>(num_bad_read[0])/num_read << ","
+            << 1 - static_cast<double>(num_bad_read[1])/num_read << "\n"
+            << "MEAN OVERLAP PERCENTAGE:\t"
+            << sum_percent_overlap[0]/num_read << ","
+            << sum_percent_overlap[1]/num_read << "\n"
+            << "MEAN OVERLAP PERCENTAGE OF INVERTED-DUPLICATES:\t"
             << sum_bad_percent_overlap[0]/num_bad_read[0] << ","
             << sum_bad_percent_overlap[1]/num_bad_read[1] << "\n"
             << endl;
