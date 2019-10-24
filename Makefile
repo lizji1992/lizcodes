@@ -20,36 +20,22 @@ ifndef SMITHLAB_CPP
 $(error Must define SMITHLAB_CPP variable)
 endif
 
-PROGS = inverted-dups
+PROGS = inverted-dup hmm_sampling
 
 SOURCES = $(wildcard *.cpp)
 INCLUDEDIRS = $(SMITHLAB_CPP)
 LIBS = -lgsl -lgslcblas # -lefence
 
 ifdef METHPIPE_ROOT
-PROGS += inverted-dups
 INCLUDEDIRS += $(METHPIPE_ROOT)/src/common
 endif
 
 INCLUDEARGS = $(addprefix -I,$(INCLUDEDIRS))
 
 CXX = g++
-CXXFLAGS = -Wall -Wextra -fmessage-length=50 -std=c++11
+CXXFLAGS = -Wall -Wextra -std=c++11
 OPTFLAGS = -O2
 DEBUGFLAGS = -g
-
-ifeq "$(shell uname)" "Darwin"
-CFLAGS += -arch x86_64
-endif
-
-# Flags passed to the C++ compiler.
-ifeq "$(shell uname)" "Darwin"
-CXXFLAGS += -arch x86_64
-ifeq "$(shell if [ `sysctl -n kern.osrelease | cut -d . -f 1` -ge 13 ];\
-              then echo 'true'; fi)" "true"
-CXXFLAGS += -stdlib=libc++
-endif
-endif
 
 ifdef DEBUG
 CXXFLAGS += $(DEBUGFLAGS)
