@@ -26,7 +26,7 @@ INCLUDEARGS = $(addprefix -I,$(INCLUDEDIRS))
 INCLUDEARGS += -I/usr/local/include
 LIBS = -L/usr/local/lib -lgsl -lgslcblas
 
-PROGS = cthmm cthmm_sim
+PROGS = cthmm cthmm_sim vdhmr
 
 CXX = g++
 CFLAGS = -Wall -fPIC -fmessage-length=50
@@ -62,6 +62,7 @@ cthmm: $(addprefix $(COMMON_DIR)/, TwoStateCTHMM.o distribution.o)
 
 cthmm_sim: $(addprefix $(COMMON_DIR)/, RNG.o )
 
+vdhmr: $(addprefix $(COMMON_DIR)/, NBVDHMM.o distribution.o)
 
 %.o: %.cpp %.hpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $< $(INCLUDEARGS)
